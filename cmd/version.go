@@ -20,22 +20,27 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/hyperledgendary/fabric-sail/common/metadata"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
 
+const ProgramName = "sail"
+
 // versionCmd represents the version command
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("version called")
+	Short: "Sail version",
+	Long: "Print the version of fabric sail",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) != 0 {
+			return fmt.Errorf("trailing args detected")
+		}
+		// Parsing of the command line is done so silence cmd usage
+		cmd.SilenceUsage = true
+		fmt.Print(GetInfo())
+		return nil
 	},
 }
 
@@ -51,4 +56,11 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// versionCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func GetInfo() string {
+	return fmt.Sprintf("%s:\n Version: %s\n Commit SHA: %s\n Go version: %s\n"+
+		" OS/Arch: %s/%s\n",
+		ProgramName, metadata.Version, metadata.CommitSHA, runtime.Version(),
+		runtime.GOOS, runtime.GOARCH)
 }
