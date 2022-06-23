@@ -1,0 +1,45 @@
+network:
+  name: asset-transfer-basic
+  namespace: test-network
+  ingressDomain: localho.st
+
+  organizations:
+    - name: org0
+      mspID: Org0MSP
+      orderers:
+        - name: org0-orderers
+          size: 3
+
+    - name: org1
+      mspID: Org1MSP
+      peers:
+        - name: org1-peer1
+          chaincode:
+            - name: asset-transfer
+              label: basic_1.0
+              channel: mychannel
+              package: https://github.com/hyperledgendary/asset-transfer-basic/releases/download/v0.1.1/asset-transfer-basic-v0.1.1.tgz
+
+        - name: org1-peer2
+          chaincode:
+            - name: asset-transfer
+              label: basic_1.0
+              channel: mychannel
+              package: https://github.com/hyperledgendary/asset-transfer-basic/releases/download/v0.1.1/asset-transfer-basic-v0.1.1.tgz
+
+    - name: org2
+      mspID: Org2MSP
+      peers:
+        - name: org2-peer1
+        - name: org2-peer2
+
+  channels:
+    - name: mychannel
+      orderers:
+        - org0-orderers
+      peers:
+        - org1-peer1
+        - org1-peer2
+        - org2-peer1
+        - org2-peer2
+
