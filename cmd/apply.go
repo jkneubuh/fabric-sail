@@ -27,15 +27,28 @@ import (
 // applyCmd represents the apply command
 var applyCmd = &cobra.Command{
 	Use:   "apply",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Apply a Fabric sail",
+	Long: `Construct a Fabric network by applying a sail configuration file to a 
+Kubernetes cluster.  The sail will launch fabric-operator in a target namespace,
+creating peers, orderers, CAs, channels, and chaincode as specified in the sail 
+configuration document.  Resources on the cluster will be created if they do 
+not already exist, and additional sail applications will apply a delta update to 
+minimize the scope of changes required to the cluster.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+After applying a sail, a local directory will be created with certificates, 
+connection profiles, and metadata suitable for running Fabric CLI binaries against 
+the generated network.
+
+Examples: 
+  # create the fabric-samples test-network, mychannel, and asset transfer chaincode:
+  sail apply -f samples/asset-transfer-basic.yaml
+
+  # Apply a sail configuration via stdin:
+  cat sail.yaml | sail apply -f -
+`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("apply called")
+		filename, _ := cmd.Flags().GetString("filename")
+		fmt.Printf("Applying sail from configuration file %s\n", filename)
 	},
 }
 
@@ -47,6 +60,8 @@ func init() {
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
 	// applyCmd.PersistentFlags().String("foo", "", "A help for foo")
+
+	applyCmd.Flags().StringP("filename", "f", "", "that contains the configuration to apply")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
