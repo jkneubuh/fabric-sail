@@ -33,4 +33,5 @@ network:
       package: https://github.com/hyperledgendary/asset-transfer-basic/releases/download/v0.1.1/asset-transfer-basic-v0.1.1.tgz
       channels:
         - name: mychannel
-          policy: "OR('org1.member', 'org2.member')
+          policy: "OR('org1.member', 'org2.member')"
+

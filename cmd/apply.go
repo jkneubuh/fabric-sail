@@ -19,7 +19,8 @@
 package cmd
 
 import (
-	"fmt"
+	"github.com/hyperledgendary/fabric-sail/sail"
+	"log"
 
 	"github.com/spf13/cobra"
 )
@@ -47,8 +48,19 @@ Examples:
   cat sail.yaml | sail apply -f -
 `,
 	Run: func(cmd *cobra.Command, args []string) {
+
 		filename, _ := cmd.Flags().GetString("filename")
-		fmt.Printf("Applying sail from configuration file %s\n", filename)
+
+		log.Printf("Applying sail from configuration file %s\n", filename)
+
+		sail, err := sail.Loft(filename)
+		if err != nil {
+			log.Fatalf("Could not load sail from configuration %s: %s\n", filename, err)
+		}
+
+		if err = sail.Sail(); err != nil {
+			log.Fatalf("error: %s\n", err)
+		}
 	},
 }
 
