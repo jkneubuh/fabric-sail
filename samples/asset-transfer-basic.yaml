@@ -34,4 +34,3 @@ network:
       channels:
         - name: mychannel
           policy: "OR('org1.member', 'org2.member')"
-
