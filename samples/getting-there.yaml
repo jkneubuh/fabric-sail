@@ -1,0 +1,54 @@
+# - orgs can host peers and orderers
+# - chaincode is INSTALLED to individual peers
+# - channel is a collection of orgs and defines a shared LEDGER
+# - chaincode is deployed (committed) to a channel with an endorsement policy over the channel members.
+
+network:
+  name: asset-transfer-basic
+
+  organizations:
+    - name: A
+      orderers:
+        - name: orgA-orderers
+          count: 3
+      peers:
+        - name: orgA-peer1
+        - name: orgA-peer2
+
+    - name: B
+      peers:
+        - name: orgB-peer1
+        - name: orgB-peer2
+
+    - name: C
+      peers:
+        - name: orgC-peer1
+        - name: orgC-peer2
+
+  channels:
+    - name: AB
+      organizations: [A, B]
+
+    - name: BC
+      organizations: [B, C]
+
+    - name: AC
+      organizations: [A, C]
+
+  chaincode:
+    - name: asset-transfer
+      version: 2.0
+      package: https://github.com/hyperledgendary/asset-transfer-basic/versions/2.0/ccpackage.tgz
+      channelBindings:
+        - channel: AB
+          policy: AND('A.member', 'B.member')
+
+        - channel: BC
+          policy: AND('B.member', 'C.member')
+
+    - name: asset-transfer
+      version: 1.0
+      package: https://github.com/hyperledgendary/asset-transfer-basic/versions/1.0/ccpackage.tgz
+      channelBindings:
+        - channel: AC
+          policy: OR('A.member', 'C.member')
