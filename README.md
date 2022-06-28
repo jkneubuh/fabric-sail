@@ -23,24 +23,63 @@ a target topology for a performance benchmarks or integration test.
 `sail` is a prototype, NOT a production system.  _Caveat emptor._
 
 
-## Quickstart 
 
-1. Create a KIND cluster by running `network kind` from fabric-operator/sample-network
+## Updated approach:  Use Argo Workflows 
+
+There isn't (yet) a good way to programmatically invoke an administrative API for all steps necessary to 
+set up, admin, and manage a network.   Instead of writing a golang SDK to - effectively - fork+exec peer 
+binaries behind the scenes, let's try a really simple approach: 
+
+1. Install Kubernetes 
+2. Install Argo Workflows 
+3. Launch an Argo Workflow to construct the Fabric Network 
+4. Launch an Argo Workflow to construct channels, join peers, etc. 
+5. Launch an Argo Workflow to install chaincode
+6. ... 
+
+Channel construction, chaincode installation, etc. can be refactored as sub-workflows or workflow templates. 
+
+
+## Quickstart (SCRATCH NOTES)
+
+
 ```shell
-network kind 
+export NS=test-network
 ```
 
-2. Create the "test network," `mychannel`, and install the basic asset transfer smart contract:
 ```shell
-sail apply -f samples/asset-transfer-basic.yaml
+network kind
+network cluster init
+network operator
 ```
 
-3. Invoke chaincode:
+Argo: 
 ```shell
-TODO
+kubectl apply -n $NS -f https://raw.githubusercontent.com/argoproj/argo-workflows/master/manifests/quick-start-postgres.yaml
 ```
 
-4. Run a gateway client application: 
+Argo GUI (terminal II): 
 ```shell
-TODO
+kubectl -n $NS port-forward deployment/argo-server 2746:2746 & 
+open https://localhost:2746 
+```
+
+Equivalent of 'network up', but with Argo:
+```shell
+argo -n $NS submit --log --watch kube/workflows/launch-test-network.yaml
+```
+
+Call chaincode:
+```shell
+TODO: do ... 
+```
+
+## Reset: 
+
+```shell
+network down
+```
+or 
+```shell
+network unkind
 ```
