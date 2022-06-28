@@ -1,15 +1,19 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: hello-world-
+  generateName: sample-network-
   labels:
     workflows.argoproj.io/archive-strategy: "false"
   annotations:
     workflows.argoproj.io/description: |
-      This is a simple hello world example.
-      You can also run it in Python: https://couler-proj.github.io/couler/examples/#hello-world
+      This is a port of 'network.sh up -ca -channel -chaincode ...' to Argo
+
 spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 8737 #; any non-root user
   entrypoint: network-up
+
   templates:
     - name: network-up
       steps:
@@ -18,11 +22,467 @@ spec:
               container:
                 image: docker/whalesay:latest
                 command: [cowsay]
-                args: ["ahoy"]
+                args: ["Ahoy, Fabric!"]
 
-        - - name: world
+        - - name: launch-cas
+            template: launch-cas
+
+        - - name: launch-orderers
+            template: launch-orderers
+        
+        - - name: launch-peers
+            template: launch-peers
+
+    - name: launch-cas
+      inputs:
+        parameters:
+          - name: STORAGE_CLASS
+            default: standard
+          - name: INGRESS_DOMAIN
+            default: localho.st
+          - name: CA_IMAGE
+            default: hyperledger/fabric-ca
+          - name: CA_IMAGE_LABEL
+            default: 1.5.4
+          - name: INIT_IMAGE
+            default: registry.access.redhat.com/ubi8/ubi-minimal
+          - name: INIT_IMAGE_LABEL
+            default: latest
+          - name: FABRIC_VERSION
+            default: 2.4.4
+          - name: FABRIC_CA_VERSION
+            default: 1.5.4
+
+      steps:
+        - - name: org0-ca
+            inline:
+              resource:
+                action: create
+                successCondition: status.status == True
+                manifest: |
+                  apiVersion: ibp.com/v1beta1
+                  kind: IBPCA
+                  metadata:
+                    name: org0-ca
+                  spec:
+                    action:
+                      renew: {}
+                    configoverride:
+                      ca:
+                        affiliations:
+                          org1:
+                            - department1
+                            - department2
+                          org2:
+                            - department1
+                        registry:
+                          identities:
+                            - name: admin
+                              pass: adminpw
+                              type: client
+                              attrs:
+                                hf.Registrar.Roles: "*"
+                                hf.Registrar.DelegateRoles: "*"
+                                hf.Revoker: true
+                                hf.IntermediateCA: true
+                                hf.GenCRL: true
+                                hf.Registrar.Attributes: "*"
+                                hf.AffiliationMgr: true
+                            - name: orderer1
+                              pass: orderer1pw
+                              type: orderer
+                            - name: orderer2
+                              pass: orderer2pw
+                              type: orderer
+                            - name: orderer3
+                              pass: orderer3pw
+                              type: orderer
+                            - name: org0admin
+                              pass: org0adminpw
+                              type: admin
+                        debug: true
+                        signing:
+                          default:
+                            expiry: 87600h0m0s
+                      tlsca:
+                        affiliations:
+                          org1:
+                            - department1
+                            - department2
+                          org0:
+                            - department1
+                        registry:
+                          identities:
+                            - name: admin
+                              pass: adminpw
+                              type: client # todo: shouldn't this be an admin?
+                              attrs:
+                                hf.Registrar.Roles: "*"
+                                hf.Registrar.DelegateRoles: "*"
+                                hf.Revoker: true
+                                hf.IntermediateCA: true
+                                hf.GenCRL: true
+                                hf.Registrar.Attributes: "*"
+                                hf.AffiliationMgr: true
+                            - name: orderer1
+                              pass: orderer1pw
+                              type: orderer
+                            - name: orderer2
+                              pass: orderer2pw
+                              type: orderer
+                            - name: orderer3
+                              pass: orderer3pw
+                              type: orderer
+                            - name: org0admin
+                              pass: org0adminpw
+                              type: admin
+
+                        debug: true
+                        signing:
+                          default:
+                            expiry: 87600h0m0s
+                    customNames:
+                      pvc: {}
+                    domain: "{{inputs.parameters.INGRESS_DOMAIN}}"
+                    images:
+                      caImage: {{inputs.parameters.CA_IMAGE}}
+                      caTag: {{inputs.parameters.CA_IMAGE_LABEL}}
+                      caInitImage: {{inputs.parameters.INIT_IMAGE}}
+                      caInitTag: {{inputs.parameters.INIT_IMAGE_LABEL}}
+                    ingress:
+                      class: ""
+                      tlsSecretName: ""
+                    license:
+                      accept: true
+                    replicas: 1
+                    resources:
+                      ca:
+                        limits:
+                          cpu: 100m
+                          memory: 200M
+                        requests:
+                          cpu: 10m
+                          memory: 10M
+                      init:
+                        limits:
+                          cpu: 100m
+                          memory: 200M
+                        requests:
+                          cpu: 10m
+                          memory: 10M
+                    service:
+                      type: ClusterIP
+                    storage:
+                      ca:
+                        class: "{{inputs.parameters.STORAGE_CLASS}}"
+                        size: 100M
+                    version: {{inputs.parameters.FABRIC_CA_VERSION}}
+
+
+          - name: org1-ca
+            inline:
+              resource:
+                action: create
+                successCondition: status.status == True
+                manifest: |
+                  apiVersion: ibp.com/v1beta1
+                  kind: IBPCA
+                  metadata:
+                    name: org1-ca
+                  spec:
+                    action:
+                      renew: {}
+                    configoverride:
+                      ca:
+                        affiliations:
+                          org1:
+                            - department1
+                            - department2
+                          org2:
+                            - department1
+                        registry:
+                          identities:
+                            - name: admin
+                              pass: adminpw
+                              type: client
+                              attrs:
+                                hf.Registrar.Roles: "*"
+                                hf.Registrar.DelegateRoles: "*"
+                                hf.Revoker: true
+                                hf.IntermediateCA: true
+                                hf.GenCRL: true
+                                hf.Registrar.Attributes: "*"
+                                hf.AffiliationMgr: true
+                            - name: peer1
+                              pass: peer1pw
+                              type: peer
+                            - name: peer2
+                              pass: peer2pw
+                              type: peer
+                            - name: org1admin
+                              pass: org1adminpw
+                              type: admin
+                        debug: true
+                        signing:
+                          default:
+                            expiry: 87600h0m0s
+                      tlsca:
+                        affiliations:
+                          org1:
+                            - department1
+                            - department2
+                          org2:
+                            - department1
+                        registry:
+                          identities:
+                            - name: admin
+                              pass: adminpw
+                              type: client # todo: shouldn't this be an admin?
+                              attrs:
+                                hf.Registrar.Roles: "*"
+                                hf.Registrar.DelegateRoles: "*"
+                                hf.Revoker: true
+                                hf.IntermediateCA: true
+                                hf.GenCRL: true
+                                hf.Registrar.Attributes: "*"
+                                hf.AffiliationMgr: true
+                            - name: peer1
+                              pass: peer1pw
+                              type: peer
+                            - name: peer2
+                              pass: peer2pw
+                              type: peer
+                            - name: org1admin
+                              pass: org1adminpw
+                              type: admin
+                        debug: true
+                        signing:
+                          default:
+                            expiry: 87600h0m0s
+                    customNames:
+                      pvc: {}
+                    domain: "{{inputs.parameters.INGRESS_DOMAIN}}"
+                    images:
+                      caImage: {{inputs.parameters.CA_IMAGE}}
+                      caTag: {{inputs.parameters.CA_IMAGE_LABEL}}
+                      caInitImage: {{inputs.parameters.INIT_IMAGE}}
+                      caInitTag: {{inputs.parameters.INIT_IMAGE_LABEL}}
+                    ingress:
+                      class: ""
+                      tlsSecretName: ""
+                    license:
+                      accept: true
+                    replicas: 1
+                    resources:
+                      ca:
+                        limits:
+                          cpu: 100m
+                          memory: 200M
+                        requests:
+                          cpu: 10m
+                          memory: 10M
+                      init:
+                        limits:
+                          cpu: 100m
+                          memory: 200M
+                        requests:
+                          cpu: 10m
+                          memory: 10M
+                    service:
+                      type: ClusterIP
+                    storage:
+                      ca:
+                        class: "{{inputs.parameters.STORAGE_CLASS}}"
+                        size: 100M
+                    version: {{inputs.parameters.FABRIC_CA_VERSION}}
+
+          - name: org2-ca
+            inline:
+              resource:
+                action: create
+                successCondition: status.status == True
+                manifest: |
+                  apiVersion: ibp.com/v1beta1
+                  kind: IBPCA
+                  metadata:
+                    name: org2-ca
+                  spec:
+                    action:
+                      renew: {}
+                    configoverride:
+                      ca:
+                        affiliations:
+                          org1:
+                            - department1
+                            - department2
+                          org2:
+                            - department1
+                        registry:
+                          identities:
+                            - name: admin
+                              pass: adminpw
+                              type: client
+                              attrs:
+                                hf.Registrar.Roles: "*"
+                                hf.Registrar.DelegateRoles: "*"
+                                hf.Revoker: true
+                                hf.IntermediateCA: true
+                                hf.GenCRL: true
+                                hf.Registrar.Attributes: "*"
+                                hf.AffiliationMgr: true
+                            - name: peer1
+                              pass: peer1pw
+                              type: peer
+                            - name: peer2
+                              pass: peer2pw
+                              type: peer
+                            - name: org2admin
+                              pass: org2adminpw
+                              type: admin
+                        debug: true
+                        signing:
+                          default:
+                            expiry: 87600h0m0s
+                      tlsca:
+                        affiliations:
+                          org1:
+                            - department1
+                            - department2
+                          org2:
+                            - department1
+                        registry:
+                          identities:
+                            - name: admin
+                              pass: adminpw
+                              type: client # todo: shouldn't this be an admin?
+                              attrs:
+                                hf.Registrar.Roles: "*"
+                                hf.Registrar.DelegateRoles: "*"
+                                hf.Revoker: true
+                                hf.IntermediateCA: true
+                                hf.GenCRL: true
+                                hf.Registrar.Attributes: "*"
+                                hf.AffiliationMgr: true
+                            - name: peer1
+                              pass: peer1pw
+                              type: peer
+                            - name: peer2
+                              pass: peer2pw
+                              type: peer
+                            - name: org2admin
+                              pass: org2adminpw
+                              type: admin
+                        debug: true
+                        signing:
+                          default:
+                            expiry: 87600h0m0s
+                    customNames:
+                      pvc: {}
+                    domain: "{{inputs.parameters.INGRESS_DOMAIN}}"
+                    images:
+                      caImage: {{inputs.parameters.CA_IMAGE}}
+                      caTag: {{inputs.parameters.CA_IMAGE_LABEL}}
+                      caInitImage: {{inputs.parameters.INIT_IMAGE}}
+                      caInitTag: {{inputs.parameters.INIT_IMAGE_LABEL}}
+                    ingress:
+                      class: ""
+                      tlsSecretName: ""
+                    license:
+                      accept: true
+                    replicas: 1
+                    resources:
+                      ca:
+                        limits:
+                          cpu: 100m
+                          memory: 200M
+                        requests:
+                          cpu: 10m
+                          memory: 10M
+                      init:
+                        limits:
+                          cpu: 100m
+                          memory: 200M
+                        requests:
+                          cpu: 10m
+                          memory: 10M
+                    service:
+                      type: ClusterIP
+                    storage:
+                      ca:
+                        class: "{{inputs.parameters.STORAGE_CLASS}}"
+                        size: 100M
+                    version: {{inputs.parameters.FABRIC_CA_VERSION}}
+
+
+
+        - - name: wait-for-org0-ca
+            inline:
+              resource:
+                action: get
+                successCondition: status.availableReplicas = 1
+                manifest: |
+                  apiVersion: apps/v1
+                  kind: Deployment
+                  metadata:
+                    name: org0-ca
+
+          - name: wait-for-org1-ca
+            inline:
+              resource:
+                action: get
+                successCondition: status.availableReplicas = 1
+                manifest: |
+                  apiVersion: apps/v1
+                  kind: Deployment
+                  metadata:
+                    name: org1-ca
+
+          - name: wait-for-org2-ca
+            inline:
+              resource:
+                action: get
+                successCondition: status.availableReplicas = 1
+                manifest: |
+                  apiVersion: apps/v1
+                  kind: Deployment
+                  metadata:
+                    name: org2-ca
+
+    - name: launch-orderers
+      steps:
+        - - name: org0-orderers
             inline:
               container:
                 image: docker/whalesay:latest
                 command: [cowsay]
-                args: ["world"]
+                args: ["org0 orderers"]
+
+    - name: launch-peers
+      steps:
+        - - name: org1-peer1
+            inline:
+              container:
+                image: docker/whalesay:latest
+                command: [cowsay]
+                args: ["org1-peer1"]
+
+          - name: org1-peer2
+            inline:
+              container:
+                image: docker/whalesay:latest
+                command: [cowsay]
+                args: ["org1-peer2"]
+
+          - name: org2-peer1
+            inline:
+              container:
+                image: docker/whalesay:latest
+                command: [cowsay]
+                args: ["org2-peer1"]
+
+          - name: org2-peer2
+            inline:
+              container:
+                image: docker/whalesay:latest
+                command: [cowsay]
+                args: ["org2-peer2"]

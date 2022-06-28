@@ -64,6 +64,13 @@ kubectl -n $NS port-forward deployment/argo-server 2746:2746 &
 open https://localhost:2746 
 ```
 
+Extend permissions for the workflows to create operator resources 
+```shell
+kubectl -n $NS apply -f kube/sail-role.yaml 
+kubectl -n $NS apply -f kube/sail-rolebinding.yaml 
+```
+
+
 Equivalent of 'network up', but with Argo:
 ```shell
 argo -n $NS submit --log --watch kube/workflows/launch-test-network.yaml
