@@ -7,10 +7,11 @@ rules:
   - apiGroups:
       - ibp.com
       - apps
+      - ""
     resources:
 #      - pods
       - deployments
-#      - configmaps
+      - configmaps
 #      - secrets
       - ibpcas
       - ibppeers

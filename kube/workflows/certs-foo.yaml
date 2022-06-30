@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: certs-foo-
+spec:
+
+  entrypoint: inline-main
+
+  templates:
+    - name: main
+      steps:
+        - - name: get
+            template: get-cert
+        - - name: print
+            template: print-cert
+            arguments:
+              parameters:
+                - name: certificate
+                  value: "{{steps.get.outputs.result}}"
+
+    - name: get-cert
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        source: |
+          kubectl -n test-network get cm/org0-ca-connection-profile -o json | jq -r .binaryData.\"profile.json\" | base64 -d | jq -r .tls.cert
+
+    - name: print-cert
+      inputs:
+        parameters:
+          - name: certificate
+            default: "ahoy!"
+      container:
+        image: docker/whalesay:latest
+        command: [cowsay]
+        args: [ "{{inputs.parameters.certificate}}" ]
+
+
+    - name: inline-main
+      steps:
+        - - name: get
+            inline:
+              container:
+                image: docker/whalesay:latest
+                command: [cowsay]
+                args: [ "GET" ]
+
+        - - name: print
+            inline:
+              container:
+                image: docker/whalesay:latest
+                command: [cowsay]
+                args: [ "{{steps.get.outputs.result}}" ]
