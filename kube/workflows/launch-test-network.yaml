@@ -18,23 +18,23 @@ spec:
   templates:
     - name: network-up
       steps:
-        - - name: hello
+        - - name: ahoy-fabric
             inline:
               container:
                 image: docker/whalesay:latest
                 command: [cowsay]
                 args: ["Ahoy, Fabric!"]
 
-        - - name: launch-cas
+        - - name: start-cas
             template: launch-cas
 
-        - - name: launch-orderers
+        - - name: start-orderers
             template: launch-orderers
         
-          - name: launch-peers
-            template: launch-peers
+          - name: start-peers
+            template: start-peers
 
-    - name: launch-cas
+    - name: start-cas
       inputs:
         parameters:
           - name: STORAGE_CLASS
@@ -413,7 +413,7 @@ spec:
                         size: 100M
                     version: {{inputs.parameters.FABRIC_CA_VERSION}}
 
-    - name: launch-orderers
+    - name: start-orderers
       inputs:
         parameters:
           - name: STORAGE_CLASS
@@ -591,10 +591,10 @@ spec:
 
 
 
-    - name: launch-peers
+    - name: start-peers
       steps:
         - - name: org1-peer1
-            template: launch-peer
+            template: start-peer
             arguments:
               parameters:
                 - name: orgnum
@@ -603,7 +603,7 @@ spec:
                   value: peer1
 
           - name: org1-peer2
-            template: launch-peer
+            template: start-peer
             arguments:
               parameters:
                 - name: orgnum
@@ -612,7 +612,7 @@ spec:
                   value: peer2
 
           - name: org2-peer1
-            template: launch-peer
+            template: start-peer
             arguments:
               parameters:
                 - name: orgnum
@@ -621,7 +621,7 @@ spec:
                   value: peer1
 
           - name: org2-peer2
-            template: launch-peer
+            template: start-peer
             arguments:
               parameters:
                 - name: orgnum
@@ -631,7 +631,7 @@ spec:
 
 
 
-    - name: launch-peer
+    - name: start-peer
       inputs:
         parameters:
           - name: orgnum
@@ -674,7 +674,7 @@ spec:
                 source: |
                   kubectl -n test-network get cm/org{{inputs.parameters.orgnum}}-ca-connection-profile -o json | jq -r .binaryData.\"profile.json\" | base64 -d | jq -r .tls.cert
 
-        - - name: launch-peer
+        - - name: start-peer
             inline:
               resource:
                 action: apply
