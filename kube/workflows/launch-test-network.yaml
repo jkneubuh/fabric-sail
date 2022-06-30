@@ -441,7 +441,7 @@ spec:
           - name: ORDERER_IMAGE_LABEL
             default: 2.4.4
       steps:
-        - - name: get-cert
+        - - name: fetch-cert
             inline:
               script:
                 image: localhost:5000/stepper
@@ -485,7 +485,7 @@ spec:
                             cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
                             caport: "443"
                             catls:
-                              cacert: "{{steps.get-cert.outputs.result}}"
+                              cacert: "{{steps.fetch-cert.outputs.result}}"
                             enrollid: "orderer1"
                             enrollsecret: "orderer1pw"
                           tls:
@@ -493,7 +493,7 @@ spec:
                             cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
                             caport: "443"
                             catls:
-                              cacert: "{{steps.get-cert.outputs.result}}"
+                              cacert: "{{steps.fetch-cert.outputs.result}}"
                             enrollid: "orderer1"
                             enrollsecret: "orderer1pw"
                             csr:
@@ -506,7 +506,7 @@ spec:
                             cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
                             caport: "443"
                             catls:
-                              cacert: "{{steps.get-cert.outputs.result}}"
+                              cacert: "{{steps.fetch-cert.outputs.result}}"
                             enrollid: "orderer2"
                             enrollsecret: "orderer2pw"
                           tls:
@@ -514,7 +514,7 @@ spec:
                             cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
                             caport: "443"
                             catls:
-                              cacert: "{{steps.get-cert.outputs.result}}"
+                              cacert: "{{steps.fetch-cert.outputs.result}}"
                             enrollid: "orderer2"
                             enrollsecret: "orderer2pw"
                             csr:
@@ -527,7 +527,7 @@ spec:
                             cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
                             caport: "443"
                             catls:
-                              cacert: "{{steps.get-cert.outputs.result}}"
+                              cacert: "{{steps.fetch-cert.outputs.result}}"
                             enrollid: "orderer3"
                             enrollsecret: "orderer3pw"
                           tls:
@@ -535,7 +535,7 @@ spec:
                             cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
                             caport: "443"
                             catls:
-                              cacert: "{{steps.get-cert.outputs.result}}"
+                              cacert: "{{steps.fetch-cert.outputs.result}}"
                             enrollid: "orderer3"
                             enrollsecret: "orderer3pw"
                             csr:
