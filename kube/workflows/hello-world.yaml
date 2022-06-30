@@ -9,7 +9,8 @@ metadata:
       This is a simple hello world example.
       You can also run it in Python: https://couler-proj.github.io/couler/examples/#hello-world
 spec:
-  entrypoint: whalesay
+  entrypoint: series
+
   templates:
   - name: whalesay
     container:
@@ -21,6 +22,36 @@ spec:
   - name: sequence
     steps:
       - - name: hello
+          inline:
+            container:
+              image: docker/whalesay:latest
+              command: [cowsay]
+              args: ["hello"]
 
 
       - - name: world
+          inline:
+            container:
+              image: docker/whalesay:latest
+              command: [cowsay]
+              args: ["world"]
+
+
+  - name: series
+    steps:
+      - - name: doit
+          inline:
+            steps:
+              - - name: a
+                  inline:
+                    container:
+                      image: docker/whalesay:latest
+                      command: [cowsay]
+                      args: ["AAA"]
+
+              - - name: b
+                  inline:
+                    container:
+                      image: docker/whalesay:latest
+                      command: [cowsay]
+                      args: ["BBB"]

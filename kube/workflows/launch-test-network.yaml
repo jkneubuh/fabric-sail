@@ -12,6 +12,8 @@ spec:
   securityContext:
     runAsNonRoot: true
     runAsUser: 8737 #; any non-root user
+
+  # entrypoint: launch-orderers
   entrypoint: network-up
 
   templates:
@@ -52,12 +54,11 @@ spec:
             default: 2.4.4
           - name: FABRIC_CA_VERSION
             default: 1.5.4
-
       steps:
         - - name: org0-ca
             inline:
               resource:
-                action: create
+                action: apply
                 successCondition: status.status == True
                 manifest: |
                   apiVersion: ibp.com/v1beta1
@@ -182,7 +183,7 @@ spec:
           - name: org1-ca
             inline:
               resource:
-                action: create
+                action: apply
                 successCondition: status.status == True
                 manifest: |
                   apiVersion: ibp.com/v1beta1
@@ -299,7 +300,7 @@ spec:
           - name: org2-ca
             inline:
               resource:
-                action: create
+                action: apply
                 successCondition: status.status == True
                 manifest: |
                   apiVersion: ibp.com/v1beta1
@@ -448,14 +449,201 @@ spec:
                   metadata:
                     name: org2-ca
 
+
     - name: launch-orderers
+      inputs:
+        parameters:
+          - name: STORAGE_CLASS
+            default: standard
+          - name: INGRESS_DOMAIN
+            default: localho.st
+          - name: KUBE_DNS_DOMAIN
+            default: test-network.svc.cluster.local
+          - name: CA_IMAGE
+            default: hyperledger/fabric-ca
+          - name: CA_IMAGE_LABEL
+            default: 1.5.4
+          - name: INIT_IMAGE
+            default: registry.access.redhat.com/ubi8/ubi-minimal
+          - name: INIT_IMAGE_LABEL
+            default: latest
+          - name: FABRIC_VERSION
+            default: 2.4.4
+          - name: FABRIC_CA_VERSION
+            default: 1.5.4
+          - name: ORG0_CA_CERT
+            default: xyzzy
+          - name: ORDERER_IMAGE
+            default: hyperledger/fabric-orderer
+          - name: ORDERER_IMAGE_LABEL
+            default: 2.4.4
       steps:
-        - - name: org0-orderers
+        - - name: retrieve-org0-certs
+            inline:
+              container:
+                image: alpine/curl
+                args:
+                  - --insecure
+                  - -s
+                  - https://test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}/cainfo
+
+        - - name: launch-orderers
             inline:
               container:
                 image: docker/whalesay:latest
                 command: [cowsay]
-                args: ["org0 orderers"]
+                args: ["CA certificate is XYZZY"]
+
+
+
+    #
+#        - - name: org0-orderers
+#            inline:
+#              resource:
+#                action: apply
+#                successCondition: status.status == True
+#                manifest: |
+#                  apiVersion: ibp.com/v1beta1
+#                  kind: IBPOrderer
+#                  metadata:
+#                    name: org0-orderers
+#                  spec:
+#                    version: "{{inputs.parameters.FABRIC_VERSION}}"
+#                    domain: "{{inputs.parameters.INGRESS_DOMAIN}}"
+#                    license:
+#                      accept: true
+#                    action:
+#                      enroll: {}
+#                      reenroll: {}
+#                    clusterSize: 3
+#                    clusterconfigoverride:
+#                      - general:
+#                          keepalive:
+#                            serverMinInterval: 61s
+#                      - general:
+#                          keepalive:
+#                            serverMinInterval: 61s
+#                      - general:
+#                          keepalive:
+#                            serverMinInterval: 61s
+#                    clustersecret:
+#                      - enrollment:
+#                          component:
+#                            caname: ca
+#                            cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
+#                            caport: "443"
+#                            catls:
+#                              cacert: "{{inputs.parameters.ORG0_CA_CERT}}"
+#                            enrollid: "orderer1"
+#                            enrollsecret: "orderer1pw"
+#                          tls:
+#                            caname: tlsca
+#                            cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
+#                            caport: "443"
+#                            catls:
+#                              cacert: "{{inputs.parameters.ORG0_CA_CERT}}"
+#                            enrollid: "orderer1"
+#                            enrollsecret: "orderer1pw"
+#                            csr:
+#                              hosts:
+#                                - "org0-orderersnode1"
+#                                - "org0-orderersnode1.{{inputs.parameters.KUBE_DNS_DOMAIN}}"
+#                      - enrollment:
+#                          component:
+#                            caname: ca
+#                            cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
+#                            caport: "443"
+#                            catls:
+#                              cacert: "{{inputs.parameters.ORG0_CA_CERT}}"
+#                            enrollid: "orderer2"
+#                            enrollsecret: "orderer2pw"
+#                          tls:
+#                            caname: tlsca
+#                            cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
+#                            caport: "443"
+#                            catls:
+#                              cacert: "{{inputs.parameters.ORG0_CA_CERT}}"
+#                            enrollid: "orderer2"
+#                            enrollsecret: "orderer2pw"
+#                            csr:
+#                              hosts:
+#                                - "org0-orderersnode2"
+#                                - "org0-orderersnode2.{{inputs.parameters.KUBE_DNS_DOMAIN}}"
+#                      - enrollment:
+#                          component:
+#                            caname: ca
+#                            cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
+#                            caport: "443"
+#                            catls:
+#                              cacert: "{{inputs.parameters.ORG0_CA_CERT}}"
+#                            enrollid: "orderer3"
+#                            enrollsecret: "orderer3pw"
+#                          tls:
+#                            caname: tlsca
+#                            cahost: test-network-org0-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}
+#                            caport: "443"
+#                            catls:
+#                              cacert: "{{inputs.parameters.ORG0_CA_CERT}}"
+#                            enrollid: "orderer3"
+#                            enrollsecret: "orderer3pw"
+#                            csr:
+#                              hosts:
+#                                - "org0-orderersnode3"
+#                                - "org0-orderersnode3.{{inputs.parameters.KUBE_DNS_DOMAIN}}"
+#
+#                    customNames:
+#                      pvc: {}
+#                    images:
+#                      ordererInitImage: {{inputs.parameters.INIT_IMAGE}}
+#                      ordererInitTag: {{inputs.parameters.INIT_IMAGE_LABEL}}
+#                      ordererImage: {{inputs.parameters.ORDERER_IMAGE}}
+#                      ordererTag: {{inputs.parameters.ORDERER_IMAGE_LABEL}}
+#                      grpcwebImage: ghcr.io/hyperledger-labs/grpc-web
+#                      grpcwebTag: latest
+#                    ingress:
+#                      class: ""
+#                      tlsSecretName: ""
+#                    mspID: OrdererMSP
+#                    ordererType: etcdraft
+#                    orgName: OrdererOrg
+#                    useChannelLess: true
+#                    systemChannelName: testchainid
+#                    resources:
+#                      init:
+#                        limits:
+#                          cpu: 100m
+#                          memory: 200M
+#                        requests:
+#                          cpu: 10m
+#                          memory: 10M
+#                      orderer:
+#                        limits:
+#                          cpu: 600m
+#                          memory: 1200M
+#                        requests:
+#                          cpu: 10m
+#                          memory: 10M
+#                      proxy:
+#                        limits:
+#                          cpu: 100m
+#                          memory: 200M
+#                        requests:
+#                          cpu: 10m
+#                          memory: 10M
+#                    service:
+#                      type: ClusterIP
+#                    storage:
+#                      orderer:
+#                        class: "{{inputs.parameters.STORAGE_CLASS}}"
+#                        size: 5G
+#
+
+
+
+
+
+
+
 
     - name: launch-peers
       steps:
