@@ -26,10 +26,10 @@ spec:
                 args: ["Ahoy, Fabric!"]
 
         - - name: start-cas
-            template: launch-cas
+            template: start-cas
 
         - - name: start-orderers
-            template: launch-orderers
+            template: start-orderers
         
           - name: start-peers
             template: start-peers
