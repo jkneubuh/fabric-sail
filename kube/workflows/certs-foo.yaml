@@ -35,7 +35,6 @@ spec:
         command: [cowsay]
         args: [ "{{inputs.parameters.certificate}}" ]
 
-
     - name: inline-main
       steps:
         - - name: get

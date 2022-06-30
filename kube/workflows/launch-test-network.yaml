@@ -13,8 +13,7 @@ spec:
     runAsNonRoot: true
     runAsUser: 8737 #; any non-root user
 
-  entrypoint: launch-orderers
-  # entrypoint: network-up
+  entrypoint: network-up
 
   templates:
     - name: network-up
@@ -486,13 +485,6 @@ spec:
                 source: |
                   kubectl -n test-network get cm/org0-ca-connection-profile -o json | jq -r .binaryData.\"profile.json\" | base64 -d | jq -r .tls.cert
 
-        - - name: show-cert
-            inline:
-              container:
-                image: docker/whalesay:latest
-                command: [cowsay]
-                args: ["CA certificate is {{steps.get-cert.outputs.result}}"]
-
         - - name: org0-orderers
             inline:
               resource:
@@ -635,38 +627,176 @@ spec:
 
 
 
-
-
-
-
-
-
     - name: launch-peers
       steps:
         - - name: org1-peer1
-            inline:
-              container:
-                image: docker/whalesay:latest
-                command: [cowsay]
-                args: ["org1-peer1"]
+            template: launch-peer
+            arguments:
+              parameters:
+                - name: org
+                  value: org1
+                - name: peer
+                  value: peer1
 
           - name: org1-peer2
-            inline:
-              container:
-                image: docker/whalesay:latest
-                command: [cowsay]
-                args: ["org1-peer2"]
+            template: launch-peer
+            arguments:
+              parameters:
+                - name: org
+                  value: org1
+                - name: peer
+                  value: peer2
 
           - name: org2-peer1
-            inline:
-              container:
-                image: docker/whalesay:latest
-                command: [cowsay]
-                args: ["org2-peer1"]
+            template: launch-peer
+            arguments:
+              parameters:
+                - name: org
+                  value: org2
+                - name: peer
+                  value: peer1
 
           - name: org2-peer2
+            template: launch-peer
+            arguments:
+              parameters:
+                - name: org
+                  value: org2
+                - name: peer
+                  value: peer2
+
+
+
+    - name: launch-peer
+      inputs:
+        parameters:
+          - name: org
+          - name: peer
+          - name: FABRIC_VERSION
+            default: 2.4.4
+          - name: INGRESS_DOMAIN
+            default: localho.st
+          - name: INIT_IMAGE
+            default: registry.access.redhat.com/ubi8/ubi-minimal
+          - name: INIT_IMAGE_LABEL
+            default: latest
+          - name: KUBE_DNS_DOMAIN
+            default: test-network.svc.cluster.local
+          - name: STORAGE_CLASS
+            default: standard
+          - name: CA_IMAGE
+            default: hyperledger/fabric-ca
+          - name: CA_IMAGE_LABEL
+            default: 1.5.4
+          - name: FABRIC_CA_VERSION
+            default: 1.5.4
+          - name: ORG0_CA_CERT
+            default: xyzzy
+          - name: ORDERER_IMAGE
+            default: hyperledger/fabric-orderer
+          - name: ORDERER_IMAGE_LABEL
+            default: 2.4.4
+          - name: PEER_IMAGE
+            default: ghcr.io/hyperledgendary/k8s-fabric-peer
+          - name: PEER_IMAGE_LABEL
+            default: v0.6.0
+
+      steps:
+        - - name: fetch-cert
             inline:
-              container:
-                image: docker/whalesay:latest
-                command: [cowsay]
-                args: ["org2-peer2"]
+              script:
+                image: localhost:5000/stepper
+                command: [bash]
+                source: |
+                  kubectl -n test-network get cm/{{inputs.parameters.org}}-ca-connection-profile -o json | jq -r .binaryData.\"profile.json\" | base64 -d | jq -r .tls.cert
+
+        - - name: launch-peer
+            inline:
+              resource:
+                action: apply
+                successCondition: status.status == True
+                manifest: |
+                  apiVersion: ibp.com/v1beta1
+                  kind: IBPPeer
+                  metadata:
+                    name: {{inputs.parameters.org}}-{{inputs.parameters.peer}}
+                  spec:
+                    version: "{{inputs.parameters.FABRIC_VERSION}}"
+                    domain: "{{inputs.parameters.INGRESS_DOMAIN}}"
+                    peerExternalEndpoint: "test-network-{{inputs.parameters.org}}-{{inputs.parameters.peer}}-peer.{{inputs.parameters.INGRESS_DOMAIN}}:443"
+                    license:
+                      accept: true
+                    action:
+                      enroll: {}
+                      reenroll: {}
+                    configoverride:
+                      peer:
+                        keepalive:
+                          minInterval: 61s
+                    customNames:
+                      pvc: {}
+                    images:
+                      peerInitImage: {{inputs.parameters.INIT_IMAGE}}
+                      peerInitTag: {{inputs.parameters.INIT_IMAGE_LABEL}}
+                      peerImage: {{inputs.parameters.PEER_IMAGE}}
+                      peerTag: {{inputs.parameters.PEER_IMAGE_LABEL}}
+                      grpcwebImage: ghcr.io/hyperledger-labs/grpc-web
+                      grpcwebTag: latest
+                    mspID: {{inputs.parameters.org}}MSP
+                    mspSecret: {{inputs.parameters.org}}-{{inputs.parameters.peer}}-secret
+                    secret:
+                      enrollment:
+                        component:
+                          caname: ca
+                          cahost: "test-network-{{inputs.parameters.org}}-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}"
+                          caport: "443"
+                          catls:
+                            cacert: "{{steps.fetch-cert.outputs.result}}"
+                          enrollid: "{{inputs.parameters.peer}}"
+                          enrollsecret: "{{inputs.parameters.peer}}pw"
+                        tls:
+                          caname: tlsca
+                          cahost: "test-network-{{inputs.parameters.org}}-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}"
+                          caport: "443"
+                          catls:
+                            cacert: "{{steps.fetch-cert.outputs.result}}"
+                          enrollid: "{{inputs.parameters.peer}}"
+                          enrollsecret: "{{inputs.parameters.peer}}pw"
+                          csr:
+                            hosts:
+                              - "{{inputs.parameters.org}}-{{inputs.parameters.peer}}"
+                              - "{{inputs.parameters.org}}-{{inputs.parameters.peer}}.{{inputs.parameters.KUBE_DNS_DOMAIN}}"
+                    chaincodeBuilderConfig:
+                      peername: {{inputs.parameters.org}}-{{inputs.parameters.peer}}
+                    service:
+                      type: ClusterIP
+                    stateDb: leveldb
+                    storage:
+                      peer:
+                        class: "{{inputs.parameters.STORAGE_CLASS}}"
+                        size: 5G
+                      statedb:
+                        class: "{{inputs.parameters.STORAGE_CLASS}}"
+                        size: 10Gi
+                    resources:
+                      init:
+                        limits:
+                          cpu: 100m
+                          memory: 200M
+                        requests:
+                          cpu: 10m
+                          memory: 10M
+                      peer:
+                        limits:
+                          cpu: 500m
+                          memory: 1G
+                        requests:
+                          cpu: 10m
+                          memory: 10M
+                      proxy:
+                        limits:
+                          cpu: 100m
+                          memory: 200M
+                        requests:
+                          cpu: 10m
+                          memory: 10M
