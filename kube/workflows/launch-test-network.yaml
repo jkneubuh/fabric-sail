@@ -633,8 +633,8 @@ spec:
             template: launch-peer
             arguments:
               parameters:
-                - name: org
-                  value: org1
+                - name: orgnum
+                  value: 1
                 - name: peer
                   value: peer1
 
@@ -642,8 +642,8 @@ spec:
             template: launch-peer
             arguments:
               parameters:
-                - name: org
-                  value: org1
+                - name: orgnum
+                  value: 1
                 - name: peer
                   value: peer2
 
@@ -651,8 +651,8 @@ spec:
             template: launch-peer
             arguments:
               parameters:
-                - name: org
-                  value: org2
+                - name: orgnum
+                  value: 2
                 - name: peer
                   value: peer1
 
@@ -660,8 +660,8 @@ spec:
             template: launch-peer
             arguments:
               parameters:
-                - name: org
-                  value: org2
+                - name: orgnum
+                  value: 2
                 - name: peer
                   value: peer2
 
@@ -670,7 +670,7 @@ spec:
     - name: launch-peer
       inputs:
         parameters:
-          - name: org
+          - name: orgnum
           - name: peer
           - name: FABRIC_VERSION
             default: 2.4.4
@@ -708,7 +708,7 @@ spec:
                 image: localhost:5000/stepper
                 command: [bash]
                 source: |
-                  kubectl -n test-network get cm/{{inputs.parameters.org}}-ca-connection-profile -o json | jq -r .binaryData.\"profile.json\" | base64 -d | jq -r .tls.cert
+                  kubectl -n test-network get cm/org{{inputs.parameters.orgnum}}-ca-connection-profile -o json | jq -r .binaryData.\"profile.json\" | base64 -d | jq -r .tls.cert
 
         - - name: launch-peer
             inline:
@@ -719,11 +719,11 @@ spec:
                   apiVersion: ibp.com/v1beta1
                   kind: IBPPeer
                   metadata:
-                    name: {{inputs.parameters.org}}-{{inputs.parameters.peer}}
+                    name: org{{inputs.parameters.orgnum}}-{{inputs.parameters.peer}}
                   spec:
                     version: "{{inputs.parameters.FABRIC_VERSION}}"
                     domain: "{{inputs.parameters.INGRESS_DOMAIN}}"
-                    peerExternalEndpoint: "test-network-{{inputs.parameters.org}}-{{inputs.parameters.peer}}-peer.{{inputs.parameters.INGRESS_DOMAIN}}:443"
+                    peerExternalEndpoint: "test-network-org{{inputs.parameters.orgnum}}-{{inputs.parameters.peer}}-peer.{{inputs.parameters.INGRESS_DOMAIN}}:443"
                     license:
                       accept: true
                     action:
@@ -742,13 +742,13 @@ spec:
                       peerTag: {{inputs.parameters.PEER_IMAGE_LABEL}}
                       grpcwebImage: ghcr.io/hyperledger-labs/grpc-web
                       grpcwebTag: latest
-                    mspID: {{inputs.parameters.org}}MSP
-                    mspSecret: {{inputs.parameters.org}}-{{inputs.parameters.peer}}-secret
+                    mspID: Org{{inputs.parameters.orgnum}}MSP
+                    mspSecret: org{{inputs.parameters.orgnum}}-{{inputs.parameters.peer}}-secret
                     secret:
                       enrollment:
                         component:
                           caname: ca
-                          cahost: "test-network-{{inputs.parameters.org}}-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}"
+                          cahost: "test-network-org{{inputs.parameters.orgnum}}-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}"
                           caport: "443"
                           catls:
                             cacert: "{{steps.fetch-cert.outputs.result}}"
@@ -756,7 +756,7 @@ spec:
                           enrollsecret: "{{inputs.parameters.peer}}pw"
                         tls:
                           caname: tlsca
-                          cahost: "test-network-{{inputs.parameters.org}}-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}"
+                          cahost: "test-network-org{{inputs.parameters.orgnum}}-ca-ca.{{inputs.parameters.INGRESS_DOMAIN}}"
                           caport: "443"
                           catls:
                             cacert: "{{steps.fetch-cert.outputs.result}}"
@@ -764,10 +764,10 @@ spec:
                           enrollsecret: "{{inputs.parameters.peer}}pw"
                           csr:
                             hosts:
-                              - "{{inputs.parameters.org}}-{{inputs.parameters.peer}}"
-                              - "{{inputs.parameters.org}}-{{inputs.parameters.peer}}.{{inputs.parameters.KUBE_DNS_DOMAIN}}"
+                              - "org{{inputs.parameters.orgnum}}-{{inputs.parameters.peer}}"
+                              - "org{{inputs.parameters.orgnum}}-{{inputs.parameters.peer}}.{{inputs.parameters.KUBE_DNS_DOMAIN}}"
                     chaincodeBuilderConfig:
-                      peername: {{inputs.parameters.org}}-{{inputs.parameters.peer}}
+                      peername: org{{inputs.parameters.orgnum}}-{{inputs.parameters.peer}}
                     service:
                       type: ClusterIP
                     stateDb: leveldb
