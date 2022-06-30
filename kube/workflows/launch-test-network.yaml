@@ -31,7 +31,7 @@ spec:
         - - name: launch-orderers
             template: launch-orderers
         
-        - - name: launch-peers
+          - name: launch-peers
             template: launch-peers
 
     - name: launch-cas
