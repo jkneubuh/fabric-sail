@@ -58,7 +58,7 @@ spec:
             inline:
               resource:
                 action: apply
-                successCondition: status.status == True
+                successCondition: status.type == Deployed
                 manifest: |
                   apiVersion: ibp.com/v1beta1
                   kind: IBPCA
@@ -183,7 +183,7 @@ spec:
             inline:
               resource:
                 action: apply
-                successCondition: status.status == True
+                successCondition: status.type == Deployed
                 manifest: |
                   apiVersion: ibp.com/v1beta1
                   kind: IBPCA
@@ -300,7 +300,7 @@ spec:
             inline:
               resource:
                 action: apply
-                successCondition: status.status == True
+                successCondition: status.type == Deployed
                 manifest: |
                   apiVersion: ibp.com/v1beta1
                   kind: IBPCA
@@ -413,42 +413,6 @@ spec:
                         size: 100M
                     version: {{inputs.parameters.FABRIC_CA_VERSION}}
 
-
-
-        - - name: wait-for-org0-ca
-            inline:
-              resource:
-                action: get
-                successCondition: status.availableReplicas = 1
-                manifest: |
-                  apiVersion: apps/v1
-                  kind: Deployment
-                  metadata:
-                    name: org0-ca
-
-          - name: wait-for-org1-ca
-            inline:
-              resource:
-                action: get
-                successCondition: status.availableReplicas = 1
-                manifest: |
-                  apiVersion: apps/v1
-                  kind: Deployment
-                  metadata:
-                    name: org1-ca
-
-          - name: wait-for-org2-ca
-            inline:
-              resource:
-                action: get
-                successCondition: status.availableReplicas = 1
-                manifest: |
-                  apiVersion: apps/v1
-                  kind: Deployment
-                  metadata:
-                    name: org2-ca
-
-
     - name: launch-orderers
       inputs:
         parameters:
@@ -489,7 +453,7 @@ spec:
             inline:
               resource:
                 action: apply
-                successCondition: status.status == True
+                successCondition: status.type == Deployed
                 manifest: |
                   apiVersion: ibp.com/v1beta1
                   kind: IBPOrderer
@@ -714,7 +678,7 @@ spec:
             inline:
               resource:
                 action: apply
-                successCondition: status.status == True
+                successCondition: status.type == Deployed
                 manifest: |
                   apiVersion: ibp.com/v1beta1
                   kind: IBPPeer
