@@ -1,0 +1,62 @@
+network:
+  name: irb
+  domain: localho.st
+
+  #  what is namespace? it might be confusing with a namespace associated to a chaincode
+  namespace: test-network
+
+  organizations:
+    - name: orderer-org
+      orderers:
+        - name: orderers
+          count: 3
+
+    - name: provider-org
+      peers:
+        - name: provider-peer1
+          anchor: true
+      clients:
+        - name: provider-cli1
+          image: "fpc/fpc-cli:main"
+
+    - name: investigator-org
+      peers:
+        - name: investigator-peer1
+          anchor: true
+          version: 2.4.4
+      clients: # optional: some container that is provisioned with client credentials
+        - name: provider-cli1
+          image: "fpc/fpc-cli:main"
+
+    - name: experimenter-org
+      peers:
+        - name: experimenter-peer1
+          anchor: true
+          image: "some-custom-fabric-peer-image:v2.4.4"
+      clients:
+        - name: provider-cli1
+          image: "fpc/fpc-cli:main"
+
+  channels:
+    - name: mychannel
+      organizations:
+        - provider-org
+        - investigator-org
+        - experimenter-org
+
+  chaincode:
+    - name: experimener-approval-service
+      version: "98aed61c91f258a37c68ed4943297695647ec7bbe6008cc111b0a12650ebeb91"
+      image: "fpc/irb-experiment:main"
+      peers: [provider-peer1, investigator-peer1, experimenter-peer1]
+      channels:
+        - name: mychannel
+          policy: "OutOf(2, 'provider-org.member', 'investigator-org.member', 'experimenter-org')"
+
+    - name: fpc-registry
+      version: "v1.0"
+      image: "fpc/fpc-ercc:main"
+      #      peers: ALL By default
+      channels:
+        - name: mychannel
+          policy: "AND('provider-org.member', 'investigator-org.member', 'experimenter-org')"
