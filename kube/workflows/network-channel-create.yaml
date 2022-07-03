@@ -26,17 +26,17 @@ spec:
         - - name: org-admins
             template: enroll-org-admins
 
-        - - name: channel-msp
-            template: create-channel-msp
-
-        - - name: genesis-block
-            template: create-genesis-block
-
-        - - name: channel-orderers
-            template: join-channel-orderers
-
-        - - name: channel-peers
-            template: join-channel-peers
+#        - - name: channel-msp
+#            template: create-channel-msp
+#
+#        - - name: genesis-block
+#            template: create-genesis-block
+#
+#        - - name: channel-orderers
+#            template: join-channel-orderers
+#
+#        - - name: channel-peers
+#            template: join-channel-peers
 
     - name: enroll-org-admins
       steps:
@@ -53,31 +53,52 @@ spec:
                 - name: password
                   value: org0adminpw
 
-          - name: org1-admin
-            template: enroll-org-admin
-            arguments:
-              parameters:
-                - name: type
-                  value: peer
-                - name: org
-                  value: org1
-                - name: username
-                  value: org1admin
-                - name: password
-                  value: org1adminpw
 
-          - name: org2-admin
-            template: enroll-org-admin
+        - - name: print-it
             arguments:
-              parameters:
-                - name: type
-                  value: peer
-                - name: org
-                  value: org2
-                - name: username
-                  value: org2admin
-                - name: password
-                  value: org2adminpw
+              artifacts:
+                - name: enrollments
+                  from: "{{steps.org0-admin.outputs.artifacts.enrollments}}"
+
+            inline:
+              inputs:
+                artifacts:
+                  - name: enrollments
+                    path: /tmp/enrollments
+
+              script:
+                image: localhost:5000/stepper
+                command: [bash]
+                source: |
+                  find /tmp/enrollments
+
+
+
+#          - name: org1-admin
+#            template: enroll-org-admin
+#            arguments:
+#              parameters:
+#                - name: type
+#                  value: peer
+#                - name: org
+#                  value: org1
+#                - name: username
+#                  value: org1admin
+#                - name: password
+#                  value: org1adminpw
+#
+#          - name: org2-admin
+#            template: enroll-org-admin
+#            arguments:
+#              parameters:
+#                - name: type
+#                  value: peer
+#                - name: org
+#                  value: org2
+#                - name: username
+#                  value: org2admin
+#                - name: password
+#                  value: org2adminpw
 
     - name: enroll-org-admin
       inputs:
@@ -86,6 +107,12 @@ spec:
           - name: org
           - name: username
           - name: password
+
+      outputs:
+        artifacts:
+          - name: enrollments
+            path: /tmp/enrollments
+
       script:
         image: localhost:5000/stepper
         command: [bash]
@@ -201,7 +228,6 @@ spec:
 
           enroll_org_admin {{inputs.parameters.type}} {{inputs.parameters.org}} {{inputs.parameters.username}} {{inputs.parameters.password}}
 
-          find /tmp
 
     - name: create-channel-msp
       container:
