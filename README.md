@@ -55,7 +55,8 @@ network operator
 
 Argo: 
 ```shell
-kubectl apply -n $NS -f https://raw.githubusercontent.com/argoproj/argo-workflows/master/manifests/quick-start-postgres.yaml
+kubectl -n $NS apply -f https://raw.githubusercontent.com/argoproj/argo-workflows/master/manifests/quick-start-postgres.yaml
+kubectl -n $NS rollout status deploy argo-server
 ```
 
 Argo GUI (terminal II): 
@@ -73,7 +74,7 @@ kubectl -n $NS apply -f kube/sail-rolebinding.yaml
 
 Equivalent of 'network up', but with Argo:
 ```shell
-argo -n $NS submit --log --watch kube/workflows/launch-test-network.yaml
+argo -n $NS submit --log --watch kube/workflows/network-up.yaml
 ```
 
 Call chaincode:

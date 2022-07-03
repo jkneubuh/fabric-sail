@@ -1,0 +1,228 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: network-channel-create-
+  labels:
+    workflows.argoproj.io/archive-strategy: "false"
+  annotations:
+    workflows.argoproj.io/description: |
+      This is a port of 'network channel create' to Argo
+
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 8737
+
+  entrypoint: channel-create
+
+  arguments:
+    parameters:
+      - name: FOO
+        value: bar
+
+  templates:
+    - name: channel-create
+      steps:
+        - - name: org-admins
+            template: enroll-org-admins
+
+        - - name: channel-msp
+            template: create-channel-msp
+
+        - - name: genesis-block
+            template: create-genesis-block
+
+        - - name: channel-orderers
+            template: join-channel-orderers
+
+        - - name: channel-peers
+            template: join-channel-peers
+
+    - name: enroll-org-admins
+      steps:
+        - - name: org0-admin
+            template: enroll-org-admin
+            arguments:
+              parameters:
+                - name: type
+                  value: orderer
+                - name: org
+                  value: org0
+                - name: username
+                  value: org0admin
+                - name: password
+                  value: org0adminpw
+
+          - name: org1-admin
+            template: enroll-org-admin
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org1
+                - name: username
+                  value: org1admin
+                - name: password
+                  value: org1adminpw
+
+          - name: org2-admin
+            template: enroll-org-admin
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org2
+                - name: username
+                  value: org2admin
+                - name: password
+                  value: org2adminpw
+
+    - name: enroll-org-admin
+      inputs:
+        parameters:
+          - name: type
+          - name: org
+          - name: username
+          - name: password
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        source: |
+
+          set -o errexit
+          set -x
+
+          # TODO: these global params come from network - should be global params
+
+          TEMP_DIR=/tmp
+          NS=test-network
+
+
+
+          # create an enrollment MSP config.yaml
+          function create_msp_config_yaml() {
+            local ca_name=$1
+            local ca_cert_name=$2
+            local msp_dir=$3
+            echo "Creating msp config ${msp_dir}/config.yaml with cert ${ca_cert_name}"
+
+            cat << EOF > ${msp_dir}/config.yaml
+          NodeOUs:
+            Enable: true
+            ClientOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: client
+            PeerOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: peer
+            AdminOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: admin
+            OrdererOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: orderer
+          EOF
+          }
+
+          function get_connection_profile() {
+            local node_name=$1
+            local connection_profile=$2
+
+            mkdir -p $(dirname ${connection_profile})
+
+            echo "writing $node_name connection profile to $connection_profile"
+
+            kubectl -n $NS get cm/${node_name}-connection-profile -o json \
+              | jq -r .binaryData.\"profile.json\" \
+              | base64 -d \
+              > ${connection_profile}
+          }
+
+          function enroll_org_admin() {
+            local type=$1
+            local org=$2
+            local username=$3
+            local password=$4
+
+            echo "Enrolling $type org admin $username"
+
+            ENROLLMENTS_DIR=${TEMP_DIR}/enrollments
+            ORG_ADMIN_DIR=${ENROLLMENTS_DIR}/${org}/users/${username}
+
+            # skip the enrollment if the admin certificate is available.
+            if [ -f "${ORG_ADMIN_DIR}/msp/keystore/key.pem" ]; then
+              echo "Found an existing admin enrollment at ${ORG_ADMIN_DIR}"
+              return
+            fi
+
+            # Retrieve the CA information from Kubernetes
+            CA_NAME=${org}-ca
+            CA_DIR=${TEMP_DIR}/cas/${CA_NAME}
+            CONNECTION_PROFILE=${CA_DIR}/connection-profile.json
+
+            get_connection_profile $CA_NAME $CONNECTION_PROFILE
+
+            # extract the CA enrollment URL and tls cert from the org connection profile
+            CA_AUTH=${username}:${password}
+            CA_ENDPOINT=$(jq -r .endpoints.api $CONNECTION_PROFILE)
+            CA_HOST=$(echo ${CA_ENDPOINT} | cut -d/ -f3 | tr ':' '\n' | head -1)
+            CA_PORT=$(echo ${CA_ENDPOINT} | cut -d/ -f3 | tr ':' '\n' | tail -1)
+            CA_URL=https://${CA_AUTH}@${CA_HOST}:${CA_PORT}
+
+            jq -r .tls.cert $CONNECTION_PROFILE | base64 -d >& $CA_DIR/tls-cert.pem
+
+            # enroll the admin user
+            FABRIC_CA_CLIENT_HOME=${ORG_ADMIN_DIR} fabric-ca-client enroll --url ${CA_URL} --tls.certfiles ${CA_DIR}/tls-cert.pem
+
+            # Construct an msp config.yaml
+            CA_CERT_NAME=${NS}-${CA_NAME}-ca-$(echo $INGRESS_DOMAIN | tr -s . -)-${CA_PORT}.pem
+
+            create_msp_config_yaml ${CA_NAME} ${CA_CERT_NAME} ${ORG_ADMIN_DIR}/msp
+
+            # private keys are hashed by name, but we only support one enrollment.
+            # test-network examples refer to this as "server.key", which is incorrect.
+            # This is the private key used to endorse transactions using the admin's
+            # public key.
+            mv ${ORG_ADMIN_DIR}/msp/keystore/*_sk ${ORG_ADMIN_DIR}/msp/keystore/key.pem
+
+
+            # enroll the admin user at the TLS CA - used for the channel admin API
+            FABRIC_CA_CLIENT_HOME=${ORG_ADMIN_DIR} \
+              fabric-ca-client enroll \
+              --url ${CA_URL} \
+              --tls.certfiles ${CA_DIR}/tls-cert.pem \
+              --mspdir ${ORG_ADMIN_DIR}/tls \
+              --caname tlsca
+
+            mv ${ORG_ADMIN_DIR}/tls/keystore/*_sk ${ORG_ADMIN_DIR}/tls/keystore/key.pem
+          }
+
+          enroll_org_admin {{inputs.parameters.type}} {{inputs.parameters.org}} {{inputs.parameters.username}} {{inputs.parameters.password}}
+
+          find /tmp
+
+    - name: create-channel-msp
+      container:
+        image: docker/whalesay:latest
+        command: [cowsay]
+        args: ["create-channel-msp"]
+
+    - name: create-genesis-block
+      container:
+        image: docker/whalesay:latest
+        command: [cowsay]
+        args: ["create-genesis-block"]
+
+    - name: join-channel-orderers
+      container:
+        image: docker/whalesay:latest
+        command: [cowsay]
+        args: ["join-channel-orderers"]
+
+    - name: join-channel-peers
+      container:
+        image: docker/whalesay:latest
+        command: [cowsay]
+        args: ["join-channel-peers"]
