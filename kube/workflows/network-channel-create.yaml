@@ -53,18 +53,53 @@ spec:
                 - name: password
                   value: org0adminpw
 
+          - name: org1-admin
+            template: enroll-org-admin
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org1
+                - name: username
+                  value: org1admin
+                - name: password
+                  value: org1adminpw
 
-        - - name: print-it
+          - name: org2-admin
+            template: enroll-org-admin
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org2
+                - name: username
+                  value: org2admin
+                - name: password
+                  value: org2adminpw
+
+        - - name: display-enrollments
             arguments:
               artifacts:
-                - name: enrollments
+                - name: org0-enrollments
                   from: "{{steps.org0-admin.outputs.artifacts.enrollments}}"
+
+                - name: org1-enrollments
+                  from: "{{steps.org1-admin.outputs.artifacts.enrollments}}"
+
+                - name: org2-enrollments
+                  from: "{{steps.org2-admin.outputs.artifacts.enrollments}}"
 
             inline:
               inputs:
                 artifacts:
-                  - name: enrollments
-                    path: /tmp/enrollments
+                  - name: org0-enrollments
+                    path: /tmp/enrollments/org0
+                  - name: org1-enrollments
+                    path: /tmp/enrollments/org1
+                  - name: org2-enrollments
+                    path: /tmp/enrollments/org2
 
               script:
                 image: localhost:5000/stepper
@@ -74,31 +109,6 @@ spec:
 
 
 
-#          - name: org1-admin
-#            template: enroll-org-admin
-#            arguments:
-#              parameters:
-#                - name: type
-#                  value: peer
-#                - name: org
-#                  value: org1
-#                - name: username
-#                  value: org1admin
-#                - name: password
-#                  value: org1adminpw
-#
-#          - name: org2-admin
-#            template: enroll-org-admin
-#            arguments:
-#              parameters:
-#                - name: type
-#                  value: peer
-#                - name: org
-#                  value: org2
-#                - name: username
-#                  value: org2admin
-#                - name: password
-#                  value: org2adminpw
 
     - name: enroll-org-admin
       inputs:
@@ -111,7 +121,7 @@ spec:
       outputs:
         artifacts:
           - name: enrollments
-            path: /tmp/enrollments
+            path: /tmp/enrollments/{{inputs.parameters.org}}
 
       script:
         image: localhost:5000/stepper
