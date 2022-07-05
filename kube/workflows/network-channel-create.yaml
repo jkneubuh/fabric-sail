@@ -13,6 +13,17 @@ spec:
     runAsNonRoot: true
     runAsUser: 8737
 
+  volumeClaimTemplates:
+    - metadata:
+        name: workdir
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 1Gi
+
   entrypoint: channel-create
 
   arguments:
@@ -80,34 +91,15 @@ spec:
                   value: org2adminpw
 
         - - name: display-enrollments
-            arguments:
-              artifacts:
-                - name: org0-enrollments
-                  from: "{{steps.org0-admin.outputs.artifacts.enrollments}}"
-
-                - name: org1-enrollments
-                  from: "{{steps.org1-admin.outputs.artifacts.enrollments}}"
-
-                - name: org2-enrollments
-                  from: "{{steps.org2-admin.outputs.artifacts.enrollments}}"
-
             inline:
-              inputs:
-                artifacts:
-                  - name: org0-enrollments
-                    path: /tmp/enrollments/org0
-                  - name: org1-enrollments
-                    path: /tmp/enrollments/org1
-                  - name: org2-enrollments
-                    path: /tmp/enrollments/org2
-
               script:
                 image: localhost:5000/stepper
                 command: [bash]
+                volumeMounts:
+                  - name: workdir
+                    mountPath: /mnt/workdir
                 source: |
-                  find /tmp/enrollments
-
-
+                  find /mnt/workdir
 
 
     - name: enroll-org-admin
@@ -118,22 +110,20 @@ spec:
           - name: username
           - name: password
 
-      outputs:
-        artifacts:
-          - name: enrollments
-            path: /tmp/enrollments/{{inputs.parameters.org}}
-
       script:
         image: localhost:5000/stepper
         command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
         source: |
 
           set -o errexit
-          set -x
+          #          set -x
 
           # TODO: these global params come from network - should be global params
 
-          TEMP_DIR=/tmp
+          TEMP_DIR=/mnt/workdir
           NS=test-network
 
 
