@@ -427,11 +427,11 @@ spec:
           - name: core-yaml
             path: /tmp/config/core.yaml
             http:
-              url: https://raw.githubusercontent.com/hyperledger-labs/fabric-operator/main/sample-network/config/core.yaml
-          - name: configtx-template
-            path: /tmp/config/configtx-template.yaml
+              url: https://raw.githubusercontent.com/jkneubuh/fabric-sail/feature/argo/kube/config/core.yaml
+          - name: configtx
+            path: /tmp/config/configtx.yaml
             http:
-              url: https://raw.githubusercontent.com/hyperledger-labs/fabric-operator/main/sample-network/config/configtx-template.yaml
+              url: https://raw.githubusercontent.com/jkneubuh/fabric-sail/feature/argo/kube/config/configtx.yaml
       script:
         image: localhost:5000/stepper
         command: [bash]
@@ -451,12 +451,7 @@ spec:
 
             mkdir -p ${TEMP_DIR}/config
             cp /tmp/config/core.yaml ${TEMP_DIR}/config/
-
-            # The channel configtx file needs to specify dynamic elements from the environment,
-            # for instance, the ${INGRESS_DOMAIN} for ingress controller and service endpoints.
-            cat /tmp/config/configtx-template.yaml | \
-              sed 's/${KUBE_DNS_DOMAIN}/test-network.svc.cluster.local/'  \
-              > ${TEMP_DIR}/config/configtx.yaml
+            cp /tmp/config/configtx.yaml ${TEMP_DIR}/config/
 
             FABRIC_CFG_PATH=${TEMP_DIR}/config \
               configtxgen \

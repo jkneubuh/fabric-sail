@@ -38,7 +38,7 @@ Organizations:
     ID: OrdererMSP
 
     # MSPDir is the filesystem path which contains the MSP configuration
-    MSPDir: ../../temp/channel-msp/ordererOrganizations/org0/msp
+    MSPDir: /mnt/workdir/channel-msp/ordererOrganizations/org0/msp
 
     # Policies defines the set of policies at this level of the config tree
     # For organization policies, their canonical path is usually
@@ -67,7 +67,7 @@ Organizations:
     # ID to load the MSP definition as
     ID: Org1MSP
 
-    MSPDir: ../../temp/channel-msp/peerOrganizations/org1/msp
+    MSPDir: /mnt/workdir/channel-msp/peerOrganizations/org1/msp
 
     # Policies defines the set of policies at this level of the config tree
     # For organization policies, their canonical path is usually
@@ -102,7 +102,7 @@ Organizations:
     # ID to load the MSP definition as
     ID: Org2MSP
 
-    MSPDir: ../../temp/channel-msp/peerOrganizations/org2/msp
+    MSPDir: /mnt/workdir/channel-msp/peerOrganizations/org2/msp
 
     # Policies defines the set of policies at this level of the config tree
     # For organization policies, their canonical path is usually
@@ -237,16 +237,16 @@ Orderer: &OrdererDefaults
     Consenters:
       - Host: org0-orderersnode1.test-network.svc.cluster.local
         Port: 7050
-        ClientTLSCert: ../../temp/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode1/tls/signcerts/tls-cert.pem
-        ServerTLSCert: ../../temp/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode1/tls/signcerts/tls-cert.pem
+        ClientTLSCert: /mnt/workdir/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode1/tls/signcerts/tls-cert.pem
+        ServerTLSCert: /mnt/workdir/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode1/tls/signcerts/tls-cert.pem
       - Host: org0-orderersnode2.test-network.svc.cluster.local
         Port: 7050
-        ClientTLSCert: ../../temp/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode2/tls/signcerts/tls-cert.pem
-        ServerTLSCert: ../../temp/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode2/tls/signcerts/tls-cert.pem
+        ClientTLSCert: /mnt/workdir/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode2/tls/signcerts/tls-cert.pem
+        ServerTLSCert: /mnt/workdir/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode2/tls/signcerts/tls-cert.pem
       - Host: org0-orderersnode3.test-network.svc.cluster.local
         Port: 7050
-        ClientTLSCert: ../../temp/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode3/tls/signcerts/tls-cert.pem
-        ServerTLSCert: ../../temp/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode3/tls/signcerts/tls-cert.pem
+        ClientTLSCert: /mnt/workdir/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode3/tls/signcerts/tls-cert.pem
+        ServerTLSCert: /mnt/workdir/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode3/tls/signcerts/tls-cert.pem
 
 
     # Options to be specified for all the etcd/raft nodes. The values here
