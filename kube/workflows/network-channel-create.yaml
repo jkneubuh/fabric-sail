@@ -122,13 +122,6 @@ spec:
             mountPath: /mnt/workdir
         source: |
 
-          set -o errexit
-          #          set -x
-
-          # TODO: these global params come from network - should be global params
-
-          TEMP_DIR=/mnt/workdir
-          NS=test-network
 
 
           # create an enrollment MSP config.yaml
@@ -228,6 +221,16 @@ spec:
 
             mv ${ORG_ADMIN_DIR}/tls/keystore/*_sk ${ORG_ADMIN_DIR}/tls/keystore/key.pem
           }
+
+
+          set -o errexit
+          #          set -x
+
+          # TODO: these global params come from network - should be global params
+
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+          INGRESS_DOMAIN=localho.st
 
           enroll_org_admin {{inputs.parameters.type}} {{inputs.parameters.org}} {{inputs.parameters.username}} {{inputs.parameters.password}}
 
@@ -594,7 +597,7 @@ spec:
 
           #  export FABRIC_LOGGING_SPEC=DEBUG
 
-            export FABRIC_CFG_PATH=${PWD}/config
+            export FABRIC_CFG_PATH=${TEMP_DIR}/config
             export CORE_PEER_ADDRESS=${NS}-${org}-${peer}-peer.${INGRESS_DOMAIN}:443
             export CORE_PEER_LOCALMSPID=Org${orgnum}MSP
             export CORE_PEER_TLS_ENABLED=true
