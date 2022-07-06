@@ -1,0 +1,73 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: network-chaincode-conga-
+  labels:
+    workflows.argoproj.io/archive-strategy: "false"
+  annotations:
+    workflows.argoproj.io/description: |
+      This workflow will install and approve the 'conga' NFT contract to a Fabric channel.
+
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 8737
+
+#  volumeClaimTemplates:
+#    - metadata:
+#        name: workdir
+#      spec:
+#        accessModes:
+#          - ReadWriteOnce
+#        storageClassName: standard
+#        resources:
+#          requests:
+#            storage: 1Gi
+
+  entrypoint: conga-contract
+
+  templates:
+    - name: conga-contract
+      steps:
+        - - name: install-package
+            template: install-package
+
+        - - name: compute-package-id
+            template: compute-package-id
+
+        - - name: approve-chaincode
+            template: approve-chaincode
+
+        - - name: commit-chaincode
+            template: commit-chaincode
+
+
+      # TODO: this is broken.  The MSP config folder with admin enrollments needs to be present.
+
+    - name: install-package
+      inputs:
+        artifacts:
+          - name: cc-package
+            path: /tmp/chaincode-package.tgz
+            http:
+              url: https://github.com/hyperledgendary/conga-nft-contract/releases/download/v0.1.1/conga-nft-contract-v0.1.1.tgz
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        source: |
+
+          export FABRIC_CFG_PATH=${PWD}/temp/config
+          export CORE_PEER_LOCALMSPID=Org1MSP
+          export CORE_PEER_ADDRESS=test-network-org1-peer1-peer.${TEST_NETWORK_INGRESS_DOMAIN}:443
+          export CORE_PEER_TLS_ENABLED=true
+          export CORE_PEER_MSPCONFIGPATH=${PWD}/temp/enrollments/org1/users/org1admin/msp
+          export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/temp/channel-msp/peerOrganizations/org1/msp/tlscacerts/tlsca-signcert.pem
+
+          peer lifecycle chaincode install /tmp/chaincode-package.tgz
+
+
+    - name: compute-package-id
+
+    - name: approve-chaincode
+
+    - name: commit-chaincode
