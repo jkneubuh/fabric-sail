@@ -34,20 +34,35 @@ spec:
   templates:
     - name: channel-create
       steps:
-        - - name: org-admins
-            template: enroll-org-admins
-
-#        - - name: channel-msp
+#        - - name: enroll-org-admins
+#            template: enroll-org-admins
+#
+#        - - name: create-channel-msp
 #            template: create-channel-msp
 #
-#        - - name: genesis-block
-#            template: create-genesis-block
+#        - - name: extract-orderer-tls-certs
+#            template: extract-orderer-tls-certs
+
+        - - name: genesis-block
+            template: create-genesis-block
 #
 #        - - name: channel-orderers
 #            template: join-channel-orderers
 #
 #        - - name: channel-peers
 #            template: join-channel-peers
+
+        - - name: display-workdir
+            inline:
+              script:
+                image: localhost:5000/stepper
+                command: [bash]
+                volumeMounts:
+                  - name: workdir
+                    mountPath: /mnt/workdir
+                source: |
+                  find /mnt/workdir
+
 
     - name: enroll-org-admins
       steps:
@@ -90,16 +105,6 @@ spec:
                 - name: password
                   value: org2adminpw
 
-        - - name: display-enrollments
-            inline:
-              script:
-                image: localhost:5000/stepper
-                command: [bash]
-                volumeMounts:
-                  - name: workdir
-                    mountPath: /mnt/workdir
-                source: |
-                  find /mnt/workdir
 
 
     - name: enroll-org-admin
@@ -125,7 +130,6 @@ spec:
 
           TEMP_DIR=/mnt/workdir
           NS=test-network
-
 
 
           # create an enrollment MSP config.yaml
@@ -230,16 +234,244 @@ spec:
 
 
     - name: create-channel-msp
-      container:
-        image: docker/whalesay:latest
-        command: [cowsay]
-        args: ["create-channel-msp"]
+      steps:
+        - - name: org0
+            template: create-channel-org-msp
+            arguments:
+              parameters:
+                - name: type
+                  value: orderer
+                - name: org
+                  value: org0
 
+          - name: org1
+            template: create-channel-org-msp
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org1
+
+          - name: org2
+            template: create-channel-org-msp
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org2
+
+    - name: extract-orderer-tls-certs
+      steps:
+        - - name: orderersnode1
+            template: extract-orderer-tls-cert
+            arguments:
+              parameters:
+                - name: org
+                  value: org0
+                - name: orderer
+                  value: orderersnode1
+
+          - name: orderersnode2
+            template: extract-orderer-tls-cert
+            arguments:
+              parameters:
+                - name: org
+                  value: org0
+                - name: orderer
+                  value: orderersnode2
+
+          - name: orderersnode3
+            template: extract-orderer-tls-cert
+            arguments:
+              parameters:
+                - name: org
+                  value: org0
+                - name: orderer
+                  value: orderersnode3
+
+    - name: extract-orderer-tls-cert
+      inputs:
+        parameters:
+          - name: org
+          - name: orderer
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+
+          function get_connection_profile() {
+            local node_name=$1
+            local connection_profile=$2
+
+            mkdir -p $(dirname ${connection_profile})
+
+            echo "writing $node_name connection profile to $connection_profile"
+
+            kubectl -n $NS get cm/${node_name}-connection-profile -o json \
+              | jq -r .binaryData.\"profile.json\" \
+              | base64 -d \
+              > ${connection_profile}
+          }
+
+          function extract_orderer_tls_cert() {
+            local org=$1
+            local orderer=$2
+
+            echo "Extracting TLS cert for $org $orderer"
+
+            ORDERER_NAME=${org}-${orderer}
+            ORDERER_DIR=${TEMP_DIR}/channel-msp/ordererOrganizations/${org}/orderers/${ORDERER_NAME}
+            ORDERER_TLS_DIR=${ORDERER_DIR}/tls
+            CONNECTION_PROFILE=${ORDERER_DIR}/connection-profile.json
+
+            get_connection_profile $ORDERER_NAME $CONNECTION_PROFILE
+
+            mkdir -p $ORDERER_TLS_DIR/signcerts
+
+            jq -r .tls.signcerts ${CONNECTION_PROFILE} \
+              | base64 -d \
+              >& $ORDERER_TLS_DIR/signcerts/tls-cert.pem
+          }
+
+          set -o errexit
+          set -x
+
+          # TODO: these global params come from network - should be global params
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+
+          extract_orderer_tls_cert {{inputs.parameters.org}} {{inputs.parameters.orderer}}
+
+
+
+    - name: create-channel-org-msp
+      inputs:
+        parameters:
+          - name: type
+          - name: org
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+
+          # create an enrollment MSP config.yaml
+          function create_msp_config_yaml() {
+            local ca_name=$1
+            local ca_cert_name=$2
+            local msp_dir=$3
+            echo "Creating msp config ${msp_dir}/config.yaml with cert ${ca_cert_name}"
+
+            cat << EOF > ${msp_dir}/config.yaml
+          NodeOUs:
+            Enable: true
+            ClientOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: client
+            PeerOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: peer
+            AdminOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: admin
+            OrdererOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: orderer
+          EOF
+          }
+
+          function create_channel_org_msp() {
+            local type=$1
+            local org=$2
+            echo "Creating channel org $org MSP"
+
+            CA_DIR=${TEMP_DIR}/cas/${org}-ca
+            ORG_MSP_DIR=${TEMP_DIR}/channel-msp/${type}Organizations/${org}/msp
+
+            mkdir -p ${ORG_MSP_DIR}/cacerts
+            mkdir -p ${ORG_MSP_DIR}/tlscacerts
+
+            jq -r .ca.signcerts ${CA_DIR}/connection-profile.json | base64 -d >& ${ORG_MSP_DIR}/cacerts/ca-signcert.pem
+            jq -r .tlsca.signcerts ${CA_DIR}/connection-profile.json | base64 -d >& ${ORG_MSP_DIR}/tlscacerts/tlsca-signcert.pem
+
+            create_msp_config_yaml ${org}-ca ca-signcert.pem ${ORG_MSP_DIR}
+          }
+
+          set -o errexit
+          set -x
+
+          # TODO: these global params come from network - should be global params
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+
+          create_channel_org_msp {{inputs.parameters.type}} {{inputs.parameters.org}}
+
+
+      #
+      # Instead of copying files or creating files from the workflow process into the container, let's
+      # try creating an input artifact from a remote / git / https URL:
+      #
     - name: create-genesis-block
-      container:
-        image: docker/whalesay:latest
-        command: [cowsay]
-        args: ["create-genesis-block"]
+      inputs:
+        parameters:
+          - name: channel-name
+            default: mychannel
+        artifacts:
+          - name: core-yaml
+            path: /tmp/config/core.yaml
+            http:
+              url: https://raw.githubusercontent.com/hyperledger-labs/fabric-operator/main/sample-network/config/core.yaml
+          - name: configtx-template
+            path: /tmp/config/configtx-template.yaml
+            http:
+              url: https://raw.githubusercontent.com/hyperledger-labs/fabric-operator/main/sample-network/config/configtx-template.yaml
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+          set -o errexit
+          set -x
+
+          # TODO: these global params come from network - should be global params
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+
+          function create_genesis_block() {
+            echo "Creating channel genesis block"
+
+            mkdir -p ${TEMP_DIR}/config
+            cp /tmp/config/core.yaml ${TEMP_DIR}/config/
+
+            # The channel configtx file needs to specify dynamic elements from the environment,
+            # for instance, the ${INGRESS_DOMAIN} for ingress controller and service endpoints.
+            cat /tmp/config/configtx-template.yaml | \
+              sed 's/${KUBE_DNS_DOMAIN}/test-network.svc.cluster.local/'  \
+              > ${TEMP_DIR}/config/configtx.yaml
+
+            FABRIC_CFG_PATH=${TEMP_DIR}/config \
+              configtxgen \
+                -profile      TwoOrgsApplicationGenesis \
+                -channelID    {{inputs.parameters.channel-name}} \
+                -outputBlock  ${TEMP_DIR}/genesis_block.pb
+
+          #  configtxgen -inspectBlock ${TEMP_DIR}/genesis_block.pb
+          }
+
+          create_genesis_block
+
+          find /mnt/workdir
+
+          cat /mnt/workdir/config/configtx.yaml
 
     - name: join-channel-orderers
       container:

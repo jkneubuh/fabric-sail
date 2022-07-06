@@ -1,0 +1,8 @@
+      - org0-orderersnode1.test-network.svc.cluster.local:7050
+      - org0-orderersnode2.test-network.svc.cluster.local:7050
+      - org0-orderersnode3.test-network.svc.cluster.local:7050
+      - Host: org1-peer1.test-network.svc.cluster.local
+      - Host: org2-peer1.test-network.svc.cluster.local
+      - Host: org0-orderersnode1.test-network.svc.cluster.local
+      - Host: org0-orderersnode2.test-network.svc.cluster.local
+      - Host: org0-orderersnode3.test-network.svc.cluster.local
