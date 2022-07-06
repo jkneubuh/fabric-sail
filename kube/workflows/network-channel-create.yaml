@@ -455,7 +455,7 @@ spec:
             FABRIC_CFG_PATH=${TEMP_DIR}/config \
               configtxgen \
                 -profile      TwoOrgsApplicationGenesis \
-                -channelID    {{inputs.parameters.channel-name}} \
+                -channelID    {{workflow.parameters.channel-name}} \
                 -outputBlock  ${TEMP_DIR}/genesis_block.pb
 
             configtxgen -inspectBlock ${TEMP_DIR}/genesis_block.pb
