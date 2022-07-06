@@ -28,8 +28,8 @@ spec:
 
   arguments:
     parameters:
-      - name: FOO
-        value: bar
+      - name: channel-name
+        value: mychannel
 
   templates:
     - name: channel-create
@@ -422,9 +422,6 @@ spec:
       #
     - name: create-genesis-block
       inputs:
-        parameters:
-          - name: channel-name
-            default: mychannel
         artifacts:
           - name: core-yaml
             path: /tmp/config/core.yaml
@@ -530,7 +527,7 @@ spec:
           # TODO: these global params come from network - should be global params
           TEMP_DIR=/mnt/workdir
           NS=test-network
-          CHANNEL_NAME=mychannel
+          CHANNEL_NAME={{workflow.parameters.channel-name}}
           INGRESS_DOMAIN=localho.st
 
           join_channel_orderer {{inputs.parameters.org}} {{inputs.parameters.orderer}}
@@ -613,7 +610,7 @@ spec:
           # TODO: these global params come from network - should be global params
           TEMP_DIR=/mnt/workdir
           NS=test-network
-          CHANNEL_NAME=mychannel
+          CHANNEL_NAME={{workflow.parameters.channel-name}}
           INGRESS_DOMAIN=localho.st
 
           export_peer_context {{inputs.parameters.orgnum}} {{inputs.parameters.peernum}}
