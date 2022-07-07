@@ -30,9 +30,22 @@ spec:
     parameters:
       - name: channel-name
         value: mychannel
+      - name: namespace
+        value: test-network
 
   templates:
     - name: channel-create
+      steps:
+        - - name: prepare-channel-artifacts
+            template: prepare-channel-artifacts
+
+        - - name: join-channel-orderers
+            template: join-channel-orderers
+
+        - - name: join-channel-peers
+            template: join-channel-peers
+
+    - name: prepare-channel-artifacts
       steps:
         - - name: enroll-org-admins
             template: enroll-org-admins
@@ -46,22 +59,36 @@ spec:
         - - name: genesis-block
             template: create-genesis-block
 
-        - - name: display-workdir
-            inline:
-              script:
-                image: localhost:5000/stepper
-                command: [bash]
-                volumeMounts:
-                  - name: workdir
-                    mountPath: /mnt/workdir
-                source: |
-                  find /mnt/workdir
+        - - name: publish-channel-artifacts
+            template: publish-channel-artifacts
 
-        - - name: join-channel-orderers
-            template: join-channel-orderers
 
-        - - name: join-channel-peers
-            template: join-channel-peers
+      # todo: use an artifact repo reference
+    - name: publish-channel-artifacts
+      outputs:
+        artifacts:
+          - name: channel-artifacts
+            path: /mnt/workdir
+            s3:
+              endpoint: minio:9000
+              insecure: true
+              bucket: my-bucket
+              key: "{{workflow.parameters.namespace}}/{{workflow.parameters.channel-name}}/channel-artifacts.tgz"
+              accessKeySecret:
+                name: my-minio-cred
+                key: accesskey
+              secretKeySecret:
+                name: my-minio-cred
+                key: secretkey
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+          find /mnt/workdir
+
 
     - name: enroll-org-admins
       steps:
