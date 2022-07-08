@@ -71,12 +71,12 @@ open https://localhost:2746
 
 Test network: 
 ```shell
-argo -n $NS submit --log --watch kube/workflows/network-up.yaml 
-argo -n $NS submit --log --watch kube/workflows/network-channel-create.yaml
+argo -n $NS submit --watch kube/workflows/network-up.yaml 
+argo -n $NS submit --watch kube/workflows/network-channel-create.yaml
 ```
 
 ```shell
-argo -n $NS submit --log --watch kube/workflows/network-chaincode-deploy.yaml
+argo -n $NS submit --watch kube/workflows/network-chaincode-conga.yaml
 ```
 
 Invoke / query chaincode: 
