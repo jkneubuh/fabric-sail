@@ -42,20 +42,24 @@ Channel construction, chaincode installation, etc. can be refactored as sub-work
 
 ## Quickstart (SCRATCH NOTES)
 
-
 ```shell
 export NS=test-network
+
+network kind 
+network cluster init
 ```
 
 ```shell
-network kind
-network cluster init
 network operator
 ```
 
-Argo: 
 ```shell
 kubectl -n $NS apply -f https://raw.githubusercontent.com/argoproj/argo-workflows/master/manifests/quick-start-postgres.yaml
+kubectl -n $NS apply -f kube/config/base/sail-role.yaml
+kubectl -n $NS apply -f kube/config/base/sail-rolebinding.yaml
+
+sleep 10
+
 kubectl -n $NS rollout status deploy argo-server
 ```
 
@@ -65,19 +69,17 @@ kubectl -n $NS port-forward deployment/argo-server 2746:2746 &
 open https://localhost:2746 
 ```
 
-Extend permissions for the workflows to create operator resources 
+Test network: 
 ```shell
-kubectl -n $NS apply -f kube/sail-role.yaml 
-kubectl -n $NS apply -f kube/sail-rolebinding.yaml 
+argo -n $NS submit --log --watch kube/workflows/network-up.yaml 
+argo -n $NS submit --log --watch kube/workflows/network-channel-create.yaml
 ```
 
-
-Equivalent of 'network up', but with Argo:
 ```shell
-argo -n $NS submit --log --watch kube/workflows/network-up.yaml
+argo -n $NS submit --log --watch kube/workflows/network-chaincode-deploy.yaml
 ```
 
-Call chaincode:
+Invoke / query chaincode: 
 ```shell
 TODO: do ... 
 ```
