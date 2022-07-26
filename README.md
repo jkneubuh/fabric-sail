@@ -69,6 +69,12 @@ kubectl -n $NS port-forward deployment/argo-server 2746:2746 &
 open https://localhost:2746 
 ```
 
+Build the "stepper" docker image and upload to the local Docker registry:
+```shell
+docker build -t localhost:5000/stepper docker/ 
+docker push localhost:5000/stepper
+```
+
 Test network: 
 ```shell
 argo -n $NS submit --watch kube/workflows/network-up.yaml 
