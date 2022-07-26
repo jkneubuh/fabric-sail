@@ -1,0 +1,645 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: network-channel-create-
+  labels:
+    workflows.argoproj.io/archive-strategy: "false"
+  annotations:
+    workflows.argoproj.io/description: |
+      This is a port of 'network channel create' to Argo
+
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 8737
+
+  volumeClaimTemplates:
+    - metadata:
+        name: workdir
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 1Gi
+
+  entrypoint: channel-create
+
+  arguments:
+    parameters:
+      - name: channel-name
+        value: mychannel
+      - name: namespace
+        value: test-network
+
+  templates:
+    - name: channel-create
+      steps:
+        - - name: prepare-channel-artifacts
+            template: prepare-channel-artifacts
+
+        - - name: join-channel-orderers
+            template: join-channel-orderers
+
+        - - name: join-channel-peers
+            template: join-channel-peers
+
+    - name: prepare-channel-artifacts
+      steps:
+        - - name: enroll-org-admins
+            template: enroll-org-admins
+
+        - - name: create-channel-msp
+            template: create-channel-msp
+
+        - - name: extract-orderer-tls-certs
+            template: extract-orderer-tls-certs
+
+        - - name: genesis-block
+            template: create-genesis-block
+
+        - - name: publish-channel-artifacts
+            template: publish-channel-artifacts
+
+
+      # todo: use an artifact repo reference
+    - name: publish-channel-artifacts
+      outputs:
+        artifacts:
+          - name: channel-artifacts
+            path: /mnt/workdir
+            s3:
+              endpoint: minio:9000
+              insecure: true
+              bucket: my-bucket
+              key: "{{workflow.parameters.namespace}}/{{workflow.parameters.channel-name}}/channel-artifacts.tgz"
+              accessKeySecret:
+                name: my-minio-cred
+                key: accesskey
+              secretKeySecret:
+                name: my-minio-cred
+                key: secretkey
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+          find /mnt/workdir
+
+
+    - name: enroll-org-admins
+      steps:
+        - - name: org0-admin
+            template: enroll-org-admin
+            arguments:
+              parameters:
+                - name: type
+                  value: orderer
+                - name: org
+                  value: org0
+                - name: username
+                  value: org0admin
+                - name: password
+                  value: org0adminpw
+
+          - name: org1-admin
+            template: enroll-org-admin
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org1
+                - name: username
+                  value: org1admin
+                - name: password
+                  value: org1adminpw
+
+          - name: org2-admin
+            template: enroll-org-admin
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org2
+                - name: username
+                  value: org2admin
+                - name: password
+                  value: org2adminpw
+
+
+
+    - name: enroll-org-admin
+      inputs:
+        parameters:
+          - name: type
+          - name: org
+          - name: username
+          - name: password
+
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+
+
+
+          # create an enrollment MSP config.yaml
+          function create_msp_config_yaml() {
+            local ca_name=$1
+            local ca_cert_name=$2
+            local msp_dir=$3
+            echo "Creating msp config ${msp_dir}/config.yaml with cert ${ca_cert_name}"
+
+            cat << EOF > ${msp_dir}/config.yaml
+          NodeOUs:
+            Enable: true
+            ClientOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: client
+            PeerOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: peer
+            AdminOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: admin
+            OrdererOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: orderer
+          EOF
+          }
+
+          function get_connection_profile() {
+            local node_name=$1
+            local connection_profile=$2
+
+            mkdir -p $(dirname ${connection_profile})
+
+            echo "writing $node_name connection profile to $connection_profile"
+
+            kubectl -n $NS get cm/${node_name}-connection-profile -o json \
+              | jq -r .binaryData.\"profile.json\" \
+              | base64 -d \
+              > ${connection_profile}
+          }
+
+          function enroll_org_admin() {
+            local type=$1
+            local org=$2
+            local username=$3
+            local password=$4
+
+            echo "Enrolling $type org admin $username"
+
+            ENROLLMENTS_DIR=${TEMP_DIR}/enrollments
+            ORG_ADMIN_DIR=${ENROLLMENTS_DIR}/${org}/users/${username}
+
+            # skip the enrollment if the admin certificate is available.
+            if [ -f "${ORG_ADMIN_DIR}/msp/keystore/key.pem" ]; then
+              echo "Found an existing admin enrollment at ${ORG_ADMIN_DIR}"
+              return
+            fi
+
+            # Retrieve the CA information from Kubernetes
+            CA_NAME=${org}-ca
+            CA_DIR=${TEMP_DIR}/cas/${CA_NAME}
+            CONNECTION_PROFILE=${CA_DIR}/connection-profile.json
+
+            get_connection_profile $CA_NAME $CONNECTION_PROFILE
+
+            # extract the CA enrollment URL and tls cert from the org connection profile
+            CA_AUTH=${username}:${password}
+            CA_ENDPOINT=$(jq -r .endpoints.api $CONNECTION_PROFILE)
+            CA_HOST=$(echo ${CA_ENDPOINT} | cut -d/ -f3 | tr ':' '\n' | head -1)
+            CA_PORT=$(echo ${CA_ENDPOINT} | cut -d/ -f3 | tr ':' '\n' | tail -1)
+            CA_URL=https://${CA_AUTH}@${CA_HOST}:${CA_PORT}
+
+            jq -r .tls.cert $CONNECTION_PROFILE | base64 -d >& $CA_DIR/tls-cert.pem
+
+            # enroll the admin user
+            FABRIC_CA_CLIENT_HOME=${ORG_ADMIN_DIR} fabric-ca-client enroll --url ${CA_URL} --tls.certfiles ${CA_DIR}/tls-cert.pem
+
+            # Construct an msp config.yaml
+            CA_CERT_NAME=${NS}-${CA_NAME}-ca-$(echo $INGRESS_DOMAIN | tr -s . -)-${CA_PORT}.pem
+
+            create_msp_config_yaml ${CA_NAME} ${CA_CERT_NAME} ${ORG_ADMIN_DIR}/msp
+
+            # private keys are hashed by name, but we only support one enrollment.
+            # test-network examples refer to this as "server.key", which is incorrect.
+            # This is the private key used to endorse transactions using the admin's
+            # public key.
+            mv ${ORG_ADMIN_DIR}/msp/keystore/*_sk ${ORG_ADMIN_DIR}/msp/keystore/key.pem
+
+
+            # enroll the admin user at the TLS CA - used for the channel admin API
+            FABRIC_CA_CLIENT_HOME=${ORG_ADMIN_DIR} \
+              fabric-ca-client enroll \
+              --url ${CA_URL} \
+              --tls.certfiles ${CA_DIR}/tls-cert.pem \
+              --mspdir ${ORG_ADMIN_DIR}/tls \
+              --caname tlsca
+
+            mv ${ORG_ADMIN_DIR}/tls/keystore/*_sk ${ORG_ADMIN_DIR}/tls/keystore/key.pem
+          }
+
+
+          set -o errexit
+          #          set -x
+
+          # TODO: these global params come from network - should be global params
+
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+          INGRESS_DOMAIN=localho.st
+
+          enroll_org_admin {{inputs.parameters.type}} {{inputs.parameters.org}} {{inputs.parameters.username}} {{inputs.parameters.password}}
+
+
+    - name: create-channel-msp
+      steps:
+        - - name: org0
+            template: create-channel-org-msp
+            arguments:
+              parameters:
+                - name: type
+                  value: orderer
+                - name: org
+                  value: org0
+
+          - name: org1
+            template: create-channel-org-msp
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org1
+
+          - name: org2
+            template: create-channel-org-msp
+            arguments:
+              parameters:
+                - name: type
+                  value: peer
+                - name: org
+                  value: org2
+
+    - name: extract-orderer-tls-certs
+      steps:
+        - - name: orderersnode1
+            template: extract-orderer-tls-cert
+            arguments:
+              parameters:
+                - name: org
+                  value: org0
+                - name: orderer
+                  value: orderersnode1
+
+          - name: orderersnode2
+            template: extract-orderer-tls-cert
+            arguments:
+              parameters:
+                - name: org
+                  value: org0
+                - name: orderer
+                  value: orderersnode2
+
+          - name: orderersnode3
+            template: extract-orderer-tls-cert
+            arguments:
+              parameters:
+                - name: org
+                  value: org0
+                - name: orderer
+                  value: orderersnode3
+
+    - name: extract-orderer-tls-cert
+      inputs:
+        parameters:
+          - name: org
+          - name: orderer
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+
+          function get_connection_profile() {
+            local node_name=$1
+            local connection_profile=$2
+
+            mkdir -p $(dirname ${connection_profile})
+
+            echo "writing $node_name connection profile to $connection_profile"
+
+            kubectl -n $NS get cm/${node_name}-connection-profile -o json \
+              | jq -r .binaryData.\"profile.json\" \
+              | base64 -d \
+              > ${connection_profile}
+          }
+
+          function extract_orderer_tls_cert() {
+            local org=$1
+            local orderer=$2
+
+            echo "Extracting TLS cert for $org $orderer"
+
+            ORDERER_NAME=${org}-${orderer}
+            ORDERER_DIR=${TEMP_DIR}/channel-msp/ordererOrganizations/${org}/orderers/${ORDERER_NAME}
+            ORDERER_TLS_DIR=${ORDERER_DIR}/tls
+            CONNECTION_PROFILE=${ORDERER_DIR}/connection-profile.json
+
+            get_connection_profile $ORDERER_NAME $CONNECTION_PROFILE
+
+            mkdir -p $ORDERER_TLS_DIR/signcerts
+
+            jq -r .tls.signcerts ${CONNECTION_PROFILE} \
+              | base64 -d \
+              >& $ORDERER_TLS_DIR/signcerts/tls-cert.pem
+          }
+
+          set -o errexit
+          set -x
+
+          # TODO: these global params come from network - should be global params
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+
+          extract_orderer_tls_cert {{inputs.parameters.org}} {{inputs.parameters.orderer}}
+
+
+
+    - name: create-channel-org-msp
+      inputs:
+        parameters:
+          - name: type
+          - name: org
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+
+          # create an enrollment MSP config.yaml
+          function create_msp_config_yaml() {
+            local ca_name=$1
+            local ca_cert_name=$2
+            local msp_dir=$3
+            echo "Creating msp config ${msp_dir}/config.yaml with cert ${ca_cert_name}"
+
+            cat << EOF > ${msp_dir}/config.yaml
+          NodeOUs:
+            Enable: true
+            ClientOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: client
+            PeerOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: peer
+            AdminOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: admin
+            OrdererOUIdentifier:
+              Certificate: cacerts/${ca_cert_name}
+              OrganizationalUnitIdentifier: orderer
+          EOF
+          }
+
+          function create_channel_org_msp() {
+            local type=$1
+            local org=$2
+            echo "Creating channel org $org MSP"
+
+            CA_DIR=${TEMP_DIR}/cas/${org}-ca
+            ORG_MSP_DIR=${TEMP_DIR}/channel-msp/${type}Organizations/${org}/msp
+
+            mkdir -p ${ORG_MSP_DIR}/cacerts
+            mkdir -p ${ORG_MSP_DIR}/tlscacerts
+
+            jq -r .ca.signcerts ${CA_DIR}/connection-profile.json | base64 -d >& ${ORG_MSP_DIR}/cacerts/ca-signcert.pem
+            jq -r .tlsca.signcerts ${CA_DIR}/connection-profile.json | base64 -d >& ${ORG_MSP_DIR}/tlscacerts/tlsca-signcert.pem
+
+            create_msp_config_yaml ${org}-ca ca-signcert.pem ${ORG_MSP_DIR}
+          }
+
+          set -o errexit
+          set -x
+
+          # TODO: these global params come from network - should be global params
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+
+          create_channel_org_msp {{inputs.parameters.type}} {{inputs.parameters.org}}
+
+
+      #
+      # Instead of copying files or creating files from the workflow process into the container, let's
+      # try creating an input artifact from a remote / git / https URL:
+      #
+    - name: create-genesis-block
+      inputs:
+        artifacts:
+          - name: core-yaml
+            path: /tmp/config/core.yaml
+            http:
+              url: https://raw.githubusercontent.com/jkneubuh/fabric-sail/feature/argo/kube/config/core.yaml
+          - name: configtx
+            path: /tmp/config/configtx.yaml
+            http:
+              url: https://raw.githubusercontent.com/jkneubuh/fabric-sail/feature/argo/kube/config/configtx.yaml
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+          set -o errexit
+          set -x
+
+          # TODO: these global params come from network - should be global params
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+
+          function create_genesis_block() {
+            echo "Creating channel genesis block"
+
+            mkdir -p ${TEMP_DIR}/config
+            cp /tmp/config/core.yaml ${TEMP_DIR}/config/
+            cp /tmp/config/configtx.yaml ${TEMP_DIR}/config/
+
+            FABRIC_CFG_PATH=${TEMP_DIR}/config \
+              configtxgen \
+                -profile      TwoOrgsApplicationGenesis \
+                -channelID    {{workflow.parameters.channel-name}} \
+                -outputBlock  ${TEMP_DIR}/genesis_block.pb
+
+            configtxgen -inspectBlock ${TEMP_DIR}/genesis_block.pb
+          }
+
+          create_genesis_block
+
+    - name: join-channel-orderers
+      steps:
+        - - name: orderersnode1
+            template: join-channel-orderer
+            arguments:
+              parameters:
+                - name: org
+                  value: org0
+                - name: orderer
+                  value: orderersnode1
+
+          - name: orderersnode2
+            template: join-channel-orderer
+            arguments:
+              parameters:
+                - name: org
+                  value: org0
+                - name: orderer
+                  value: orderersnode2
+
+          - name: orderersnode3
+            template: join-channel-orderer
+            arguments:
+              parameters:
+                - name: org
+                  value: org0
+                - name: orderer
+                  value: orderersnode3
+
+    - name: join-channel-orderer
+      inputs:
+        parameters:
+          - name: org
+          - name: orderer
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+          # Request from the channel ADMIN api that the orderer joins the target channel
+          function join_channel_orderer() {
+            local org=$1
+            local orderer=$2
+
+            # The client certificate presented in this case is the admin USER TLS enrollment key.  This is a stronger assertion
+            # of identity than the Docker Compose network, which transmits the orderer NODE TLS key pair directly
+
+            osnadmin channel join \
+              --orderer-address ${NS}-${org}-${orderer}-admin.${INGRESS_DOMAIN} \
+              --ca-file         ${TEMP_DIR}/channel-msp/ordererOrganizations/${org}/orderers/${org}-${orderer}/tls/signcerts/tls-cert.pem \
+              --client-cert     ${TEMP_DIR}/enrollments/${org}/users/${org}admin/tls/signcerts/cert.pem \
+              --client-key      ${TEMP_DIR}/enrollments/${org}/users/${org}admin/tls/keystore/key.pem \
+              --channelID       ${CHANNEL_NAME} \
+              --config-block    ${TEMP_DIR}/genesis_block.pb
+          }
+
+          set -o errexit
+          set -x
+
+          # TODO: these global params come from network - should be global params
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+          CHANNEL_NAME={{workflow.parameters.channel-name}}
+          INGRESS_DOMAIN=localho.st
+
+          join_channel_orderer {{inputs.parameters.org}} {{inputs.parameters.orderer}}
+
+
+      # Try a loop construct over the peers in the network
+    - name: join-channel-peers
+      steps:
+        - - name: org1-peer1
+            template: join-channel-peer
+            arguments:
+              parameters:
+                - name: orgnum
+                  value: 1
+                - name: peernum
+                  value: 1
+
+          - name: org1-peer2
+            template: join-channel-peer
+            arguments:
+              parameters:
+                - name: orgnum
+                  value: 1
+                - name: peernum
+                  value: 2
+
+          - name: org2-peer1
+            template: join-channel-peer
+            arguments:
+              parameters:
+                - name: orgnum
+                  value: 2
+                - name: peernum
+                  value: 1
+
+          - name: org2-peer2
+            template: join-channel-peer
+            arguments:
+              parameters:
+                - name: orgnum
+                  value: 2
+                - name: peernum
+                  value: 2
+
+    - name: join-channel-peer
+      inputs:
+        parameters:
+          - name: orgnum
+          - name: peernum
+      script:
+        image: localhost:5000/stepper
+        command: [bash]
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        source: |
+          echo joining org {{inputs.parameters.orgnum}} peer {{inputs.parameters.peernum}}
+
+          function export_peer_context() {
+            local orgnum=$1
+            local peernum=$2
+            local org=org${orgnum}
+            local peer=peer${peernum}
+
+          #  export FABRIC_LOGGING_SPEC=DEBUG
+
+            export FABRIC_CFG_PATH=${TEMP_DIR}/config
+            export CORE_PEER_ADDRESS=${NS}-${org}-${peer}-peer.${INGRESS_DOMAIN}:443
+            export CORE_PEER_LOCALMSPID=Org${orgnum}MSP
+            export CORE_PEER_TLS_ENABLED=true
+            export CORE_PEER_MSPCONFIGPATH=${TEMP_DIR}/enrollments/${org}/users/${org}admin/msp
+            export CORE_PEER_TLS_ROOTCERT_FILE=${TEMP_DIR}/channel-msp/peerOrganizations/${org}/msp/tlscacerts/tlsca-signcert.pem
+
+          #  export | egrep "CORE_|FABRIC_"
+          }
+
+          set -o errexit
+          set -x
+
+          # TODO: these global params come from network - should be global params
+          TEMP_DIR=/mnt/workdir
+          NS=test-network
+          CHANNEL_NAME={{workflow.parameters.channel-name}}
+          INGRESS_DOMAIN=localho.st
+
+          export_peer_context {{inputs.parameters.orgnum}} {{inputs.parameters.peernum}}
+
+          peer channel join --blockpath $TEMP_DIR/genesis_block.pb

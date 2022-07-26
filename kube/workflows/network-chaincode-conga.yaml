@@ -1,0 +1,202 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: network-chaincode-conga-
+  labels:
+    workflows.argoproj.io/archive-strategy: "false"
+  annotations:
+    workflows.argoproj.io/description: |
+      This workflow will install and approve the 'conga' NFT contract to a Fabric channel.
+
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 8737
+
+  volumeClaimTemplates:
+    - metadata:
+        name: workdir
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 1Gi
+
+  entrypoint: conga-contract
+
+  arguments:
+    parameters:
+      - name: channel-name
+        value: mychannel
+      - name: namespace
+        value: test-network
+
+  templates:
+    - name: conga-contract
+      steps:
+        - - name: read-channel-artifacts
+            template: read-channel-artifacts
+
+        - - name: install-package
+            template: install-package
+
+        - - name: compute-package-id
+            template: compute-package-id
+
+        - - name: approve-chaincode
+            template: approve-chaincode
+            arguments:
+              parameters:
+                - name: chaincode-id
+                  value: "{{steps.compute-package-id.outputs.result}}"
+
+        - - name: commit-chaincode
+            template: commit-chaincode
+
+    - name: read-channel-artifacts
+      inputs:
+        artifacts:
+          - name: channel-artifacts
+            path: /tmp/channel-artifacts.tgz
+            archive:
+              none: {}
+            s3:
+              endpoint: minio:9000
+              insecure: true
+              bucket: my-bucket
+              key: "{{workflow.parameters.namespace}}/{{workflow.parameters.channel-name}}/channel-artifacts.tgz"
+              accessKeySecret:
+                name: my-minio-cred
+                key: accesskey
+              secretKeySecret:
+                name: my-minio-cred
+                key: secretkey
+      script:
+        image: localhost:5000/stepper
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        command: [bash]
+        source: |
+          tar zxvf /tmp/channel-artifacts.tgz -C /mnt/workdir
+
+    - name: install-package
+      inputs:
+        artifacts:
+          - name: cc-package
+            path: /tmp/chaincode-package.tgz
+            archive:
+              none: {}
+            http:
+              url: https://github.com/hyperledgendary/conga-nft-contract/releases/download/v0.1.1/conga-nft-contract-v0.1.1.tgz
+
+      script:
+        image: localhost:5000/stepper
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        command: [bash]
+        env:
+          - name: FABRIC_CFG_PATH
+            value: /mnt/workdir/workdir/config
+        source: |
+          export org=org1
+          export peer=peer1
+          export TEMP_DIR=/mnt/workdir/workdir
+          export INGRESS_DOMAIN=localho.st
+
+          export CORE_PEER_ADDRESS=test-network-org1-peer1-peer.localho.st:443
+          export CORE_PEER_LOCALMSPID=Org1MSP
+          export CORE_PEER_TLS_ENABLED=true
+          export CORE_PEER_MSPCONFIGPATH=${TEMP_DIR}/enrollments/${org}/users/${org}admin/msp
+          export CORE_PEER_TLS_ROOTCERT_FILE=${TEMP_DIR}/channel-msp/peerOrganizations/${org}/msp/tlscacerts/tlsca-signcert.pem
+
+          peer lifecycle chaincode install /tmp/chaincode-package.tgz
+
+    - name: compute-package-id
+      inputs:
+        artifacts:
+          - name: cc-package
+            path: /tmp/chaincode-package.tgz
+            archive:
+              none: {}
+            http:
+              url: https://github.com/hyperledgendary/conga-nft-contract/releases/download/v0.1.1/conga-nft-contract-v0.1.1.tgz
+      script:
+        image: localhost:5000/stepper
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        command: [bash]
+        env:
+          - name: FABRIC_CFG_PATH
+            value: /mnt/workdir/workdir/config
+        source: |
+          peer lifecycle chaincode calculatepackageid /tmp/chaincode-package.tgz
+
+    - name: approve-chaincode
+      inputs:
+        parameters:
+          - name: chaincode-id
+      script:
+        image: localhost:5000/stepper
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        command: [bash]
+        source: |
+          export org=org1
+          export peer=peer1
+          export TEMP_DIR=/mnt/workdir/workdir
+          export INGRESS_DOMAIN=localho.st
+
+          export FABRIC_CFG_PATH=/mnt/workdir/workdir/config
+          export CORE_PEER_ADDRESS=test-network-org1-peer1-peer.localho.st:443
+          export CORE_PEER_LOCALMSPID=Org1MSP
+          export CORE_PEER_TLS_ENABLED=true
+          export CORE_PEER_MSPCONFIGPATH=${TEMP_DIR}/enrollments/${org}/users/${org}admin/msp
+          export CORE_PEER_TLS_ROOTCERT_FILE=${TEMP_DIR}/channel-msp/peerOrganizations/${org}/msp/tlscacerts/tlsca-signcert.pem
+
+          peer lifecycle \
+            chaincode approveformyorg \
+            --channelID     {{workflow.parameters.channel-name}} \
+            --name          conga-nft-contract \
+            --version       1 \
+            --package-id    {{inputs.parameters.chaincode-id}} \
+            --sequence      1 \
+            --orderer       test-network-org0-orderersnode1-orderer.localho.st:443 \
+            --tls --cafile  $TEMP_DIR/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode1/tls/signcerts/tls-cert.pem \
+            --connTimeout   15s
+
+
+    - name: commit-chaincode
+      script:
+        image: localhost:5000/stepper
+        volumeMounts:
+          - name: workdir
+            mountPath: /mnt/workdir
+        command: [bash]
+        source: |
+          export org=org1
+          export peer=peer1
+          export TEMP_DIR=/mnt/workdir/workdir
+          export INGRESS_DOMAIN=localho.st
+
+          export FABRIC_CFG_PATH=/mnt/workdir/workdir/config
+          export CORE_PEER_ADDRESS=test-network-org1-peer1-peer.localho.st:443
+          export CORE_PEER_LOCALMSPID=Org1MSP
+          export CORE_PEER_TLS_ENABLED=true
+          export CORE_PEER_MSPCONFIGPATH=${TEMP_DIR}/enrollments/${org}/users/${org}admin/msp
+          export CORE_PEER_TLS_ROOTCERT_FILE=${TEMP_DIR}/channel-msp/peerOrganizations/${org}/msp/tlscacerts/tlsca-signcert.pem
+
+          peer lifecycle \
+            chaincode commit \
+            --channelID     {{workflow.parameters.channel-name}} \
+            --name          conga-nft-contract \
+            --version       1 \
+            --sequence      1 \
+            --orderer       test-network-org0-orderersnode1-orderer.localho.st:443 \
+            --tls --cafile  $TEMP_DIR/channel-msp/ordererOrganizations/org0/orderers/org0-orderersnode1/tls/signcerts/tls-cert.pem \
+            --connTimeout   15s
